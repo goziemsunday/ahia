@@ -15,13 +15,13 @@ Ahia provides a complete e-commerce experience:
 
 ## Stack
 
-**Backend:** [Hono](https://hono.dev) on [Bun](https://bun.sh) for the API, [Better-Auth](https://better-auth.com) for auth, and PostgreSQL + [Drizzle](https://orm.drizzle.team) for data.
+**Backend:** Hono on Bun for the API, Better Auth for auth, and PostgreSQL + Drizzle for data.
 
-**Frontend:** [Next.js](https://nextjs.org) with React 19, TanStack React Query for server state, React Form + React Table for forms and tables, and [Tailwind](https://tailwindcss.com) for styling.
+**Frontend:** Next.js with React 19, TanStack React Query for server state, React Form + React Table for forms and tables, and Tailwind for styling.
 
-**Monorepo:** [Turborepo](https://turborepo.dev) orchestrates the build and Bun manages packages.
+**Monorepo:** Turborepo orchestrates the build and Bun manages packages.
 
-**Integrations:** [Stripe](https://stripe.com) for payments, [Resend](https://resend.com) for transactional email, and [Cloudflare R2](https://www.cloudflare.com/products/r2) for image storage.
+**Integrations:** Stripe for payments, Resend for transactional email, and Cloudflare R2 for image storage.
 
 ## Getting Started
 
@@ -33,7 +33,7 @@ Ahia provides a complete e-commerce experience:
 ### 1. Clone & Install
 
 ```bash
-git clone <repo-url>****
+git clone https://github.com/chiagxziem/ahia.git
 cd ahia
 bun install
 ```
@@ -81,7 +81,6 @@ turbo run build
 - **Session-based:** Tokens stored in secure httpOnly cookies
 - **OAuth:** Google login supported
 - **Roles:** User, Admin, Superadmin with granular permissions
-- **Impersonation:** Admins can impersonate users for support/debugging
 - **Admin Plugin:** Role-based middleware integrated into Better-Auth
 
 ## License
