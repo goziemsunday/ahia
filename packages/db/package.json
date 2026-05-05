@@ -15,8 +15,7 @@
     "db:psql": "docker exec -it ahia-pg psql -U user -d ahia",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:up": "docker compose up -d",
-    "products:import:r2": "bun run src/scripts/import-products-from-r2.ts"
+    "db:up": "docker compose up -d"
   },
   "dependencies": {
     "@t3-oss/env-core": "^0.13.11",
