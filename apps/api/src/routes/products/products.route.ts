@@ -1,24 +1,17 @@
 import { validator } from "hono-openapi";
-import slugify from "slugify";
 import { z } from "zod";
 
-import { db, eq } from "@repo/db";
-import { product, productCategory } from "@repo/db/schemas/product.schema";
-
 import { createRouter } from "@/app";
-import { validateFile, validateProductImages } from "@/lib/file";
 import HttpStatusCodes from "@/lib/http-status-codes";
 import { getErrDetailsFromErrFields } from "@/lib/openapi";
-import { deleteImageFromR2, uploadImageToR2 } from "@/lib/r2";
 import {
   CreateProductSchema,
-  InStockSchema,
   PaginationQuerySchema,
   SearchQuerySchema,
   ShopQuerySchema,
   UpdateProductSchema,
 } from "@/lib/schemas";
-import { errorResponse, parseJsonField, successResponse } from "@/lib/utils";
+import { errorResponse, successResponse } from "@/lib/utils";
 import { authed } from "@/middleware/authed";
 import { permit } from "@/middleware/permit";
 import { validationHook } from "@/middleware/validation-hook";
@@ -32,42 +25,40 @@ import {
   searchProducts,
 } from "@/queries/product-queries";
 import {
-  getFeaturedProductDoc,
-  getLatestProductsDoc,
-  getShopProductsDoc,
-  getTrendingProductsDoc,
-  searchProductsDoc,
-} from "@/routes/products/products.docs";
+  createProduct,
+  deleteProduct,
+  updateProduct,
+} from "@/services/product-service";
 
 import {
   createProductDoc,
   deleteProductDoc,
   getAllProductsDoc,
+  getFeaturedProductDoc,
+  getLatestProductsDoc,
   getProductDoc,
+  getShopProductsDoc,
+  getTrendingProductsDoc,
+  searchProductsDoc,
   updateProductDoc,
 } from "./products.docs";
 
 const products = createRouter();
 
-// Get all products
+// ── read-only routes (no auth required) ────────────────────────────
+
+// Get all products (paginated)
 products.get(
   "/",
   getAllProductsDoc,
   validator("query", PaginationQuerySchema, validationHook),
   async (c) => {
     const { page, limit } = c.req.valid("query");
-
     const { products: allProducts, total } = await getProducts(page, limit);
 
-    let pagination;
-    if (limit) {
-      pagination = {
-        page: page ?? 1,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      };
-    }
+    const pagination = limit
+      ? { page: page ?? 1, limit, total, totalPages: Math.ceil(total / limit) }
+      : undefined;
 
     return c.json(
       successResponse(
@@ -80,17 +71,15 @@ products.get(
   },
 );
 
-// Get featured product (changes daily)
+// Get featured product (daily rotation)
 products.get("/featured", getFeaturedProductDoc, async (c) => {
   const featured = await getFeaturedProduct();
-
   if (!featured) {
     return c.json(
       errorResponse("NOT_FOUND", "No featured product available"),
       HttpStatusCodes.NOT_FOUND,
     );
   }
-
   return c.json(
     successResponse(featured, "Featured product retrieved successfully"),
     HttpStatusCodes.OK,
@@ -109,7 +98,6 @@ products.get(
   async (c) => {
     const { limit } = c.req.valid("query");
     const latest = await getLatestProducts(limit ?? 4);
-
     return c.json(
       successResponse(latest, "Latest products retrieved successfully"),
       HttpStatusCodes.OK,
@@ -117,7 +105,7 @@ products.get(
   },
 );
 
-// Get trending products (most sold in the last 30 days)
+// Get trending products (most sold in last 30 days)
 products.get(
   "/trending",
   getTrendingProductsDoc,
@@ -129,7 +117,6 @@ products.get(
   async (c) => {
     const { limit } = c.req.valid("query");
     const trending = await getTrendingProducts(limit ?? 4);
-
     return c.json(
       successResponse(trending, "Trending products retrieved successfully"),
       HttpStatusCodes.OK,
@@ -144,7 +131,6 @@ products.get(
   validator("query", ShopQuerySchema, validationHook),
   async (c) => {
     const params = c.req.valid("query");
-
     const { products: shopProducts, total } = await getShopProducts({
       page: params.page,
       limit: params.limit,
@@ -154,20 +140,13 @@ products.get(
       sort: params.sort,
       new: params.new,
     });
-
-    const pagination = {
-      page: params.page,
-      limit: params.limit,
-      total,
-      totalPages: Math.ceil(total / params.limit),
-    };
-
     return c.json(
-      successResponse(
-        shopProducts,
-        "Shop products retrieved successfully",
-        pagination,
-      ),
+      successResponse(shopProducts, "Shop products retrieved successfully", {
+        page: params.page,
+        limit: params.limit,
+        total,
+        totalPages: Math.ceil(total / params.limit),
+      }),
       HttpStatusCodes.OK,
     );
   },
@@ -181,7 +160,6 @@ products.get(
   async (c) => {
     const { q, limit } = c.req.valid("query");
     const results = await searchProducts(q, limit ?? 30);
-
     return c.json(
       successResponse(results, "Search results retrieved successfully"),
       HttpStatusCodes.OK,
@@ -196,24 +174,22 @@ products.get(
   validator("param", z.object({ id: z.uuid() }), validationHook),
   async (c) => {
     const { id } = c.req.valid("param");
-
-    const productExtended = await getProductById(id);
-
-    if (!productExtended) {
+    const found = await getProductById(id);
+    if (!found) {
       return c.json(
         errorResponse("NOT_FOUND", "Product not found"),
         HttpStatusCodes.NOT_FOUND,
       );
     }
-
     return c.json(
-      successResponse(productExtended, "Product retrieved successfully"),
+      successResponse(found, "Product retrieved successfully"),
       HttpStatusCodes.OK,
     );
   },
 );
 
-// Middleware for protected routes
+// ── write routes (auth + permission required) ──────────────────────
+
 products.use(authed).use(permit({ product: ["create", "update", "delete"] }));
 
 // Create product
@@ -222,222 +198,39 @@ products.post(
   createProductDoc,
   validator("form", CreateProductSchema, validationHook),
   async (c) => {
-    const rawFormData = c.req.valid("form");
-
-    // Validate and transform form data
-    const validationErrors: Record<string, string> = {};
-
-    // Validate and transform price
-    let price: string;
-    if (rawFormData.price) {
-      const priceNum = Number.parseFloat(rawFormData.price);
-      if (Number.isNaN(priceNum) || priceNum <= 0) {
-        validationErrors.price = "Price must be a positive number";
-      } else {
-        price = priceNum.toFixed(2);
-      }
-    }
-
-    // Validate and transform stockQuantity
-    let stockQuantity: number = 0;
-    if (rawFormData.stockQuantity) {
-      const stockNum = Number.parseInt(rawFormData.stockQuantity, 10);
-      if (Number.isNaN(stockNum) || stockNum < 0) {
-        validationErrors.stockQuantity =
-          "Stock quantity must be a non-negative number";
-      } else {
-        stockQuantity = stockNum;
-      }
-    } else {
-      validationErrors.stockQuantity = "Stock quantity is required";
-    }
-
-    // Validate and transform sizes using Zod
-    const sizesResult = parseJsonField(
-      rawFormData.sizes,
-      z.array(InStockSchema),
-      "Sizes",
-    );
-    let sizes: { name: string; inStock: boolean }[] = [];
-    if (!sizesResult.success) {
-      validationErrors.sizes = sizesResult.error;
-    } else {
-      sizes = sizesResult.data;
-    }
-
-    if (sizes && sizes.length > 0) {
-      const sizeNames = sizes.map((s) => s.name.toLowerCase());
-      const uniqueSizeNames = new Set(sizeNames);
-      if (sizeNames.length !== uniqueSizeNames.size) {
-        validationErrors.sizes = "Size names must be unique (case-insensitive)";
-      } else if (stockQuantity > 0 && !sizes.some((s) => s.inStock)) {
-        validationErrors.sizes =
-          "At least one size must be in stock when stock quantity is greater than 0";
-      }
-    }
-
-    // Validate and transform colors using Zod
-    const colorsResult = parseJsonField(
-      rawFormData.colors,
-      z.array(InStockSchema),
-      "Colors",
-    );
-    let colors: { name: string; inStock: boolean }[] = [];
-    if (!colorsResult.success) {
-      validationErrors.colors = colorsResult.error;
-    } else {
-      colors = colorsResult.data;
-    }
-
-    if (colors && colors.length > 0) {
-      const colorNames = colors.map((c) => c.name.toLowerCase());
-      const uniqueColorNames = new Set(colorNames);
-      if (colorNames.length !== uniqueColorNames.size) {
-        validationErrors.colors =
-          "Color names must be unique (case-insensitive)";
-      } else if (stockQuantity > 0 && !colors.some((c) => c.inStock)) {
-        validationErrors.colors =
-          "At least one color must be in stock when stock quantity is greater than 0";
-      }
-    }
-
-    // Validate and transform categoryIds using Zod
-    const categoryIdsResult = parseJsonField(
-      rawFormData.categoryIds,
-      z.array(z.uuid({ message: "Must be a valid UUID" })),
-      "Category IDs",
-    );
-    let categoryIds: string[] = [];
-    if (!categoryIdsResult.success) {
-      validationErrors.categoryIds = categoryIdsResult.error;
-    } else {
-      categoryIds = categoryIdsResult.data;
-    }
-
-    // Return validation errors if any
-    if (Object.keys(validationErrors).length > 0) {
-      return c.json(
-        errorResponse(
-          "INVALID_DATA",
-          getErrDetailsFromErrFields(validationErrors),
-          validationErrors,
-        ),
-        HttpStatusCodes.BAD_REQUEST,
-      );
-    }
-
-    // Validate images
-    try {
-      validateProductImages(rawFormData.images);
-    } catch (error) {
-      return c.json(
-        errorResponse(
-          "INVALID_FILE",
-          error instanceof Error ? error.message : "Image validation failed",
-        ),
-        HttpStatusCodes.UNPROCESSABLE_ENTITY,
-      );
-    }
-
+    const parsed = c.req.valid("form");
     const user = c.get("user");
 
-    // Check if categories exist
-    const existingCategories = await db.query.category.findMany({
-      where: (category, { inArray }) => inArray(category.id, categoryIds),
-    });
+    const result = await createProduct(parsed, parsed.images, user.id);
 
-    if (existingCategories.length !== categoryIds.length) {
-      return c.json(
-        errorResponse("INVALID_DATA", "One or more categories not found"),
-        HttpStatusCodes.BAD_REQUEST,
-      );
-    }
-
-    // Generate unique slug
-    const baseSlug = slugify(rawFormData.name.trim(), {
-      lower: true,
-      strict: true,
-    });
-    let slug = baseSlug;
-
-    const existingSlugs = await db.query.product.findMany({
-      where: (product, { or, eq, like }) =>
-        or(eq(product.slug, baseSlug), like(product.slug, `${baseSlug}-%`)),
-      columns: { slug: true },
-    });
-
-    const slugSet = new Set(existingSlugs.map((p) => p.slug));
-    let counter = 0;
-
-    while (true) {
-      const finalSlug = counter === 0 ? baseSlug : `${baseSlug}-${counter}`;
-      if (!slugSet.has(finalSlug)) {
-        slug = finalSlug;
-        break;
+    if (!result.ok) {
+      if (result.type === "imageError") {
+        return c.json(
+          errorResponse(result.code, result.error),
+          result.status as 422,
+        );
       }
-      counter++;
-    }
-
-    // Upload images to R2
-    const uploadPromises = rawFormData.images.map((image) =>
-      uploadImageToR2(image, "products"),
-    );
-    const uploadedImages = await Promise.all(uploadPromises);
-
-    try {
-      const result = await db.transaction(async (tx) => {
-        // Create product
-        const [newProduct] = await tx
-          .insert(product)
-          .values({
-            name: rawFormData.name.trim(),
-            slug,
-            description: rawFormData.description?.trim(),
-            price: price,
-            stockQuantity,
-            sizes,
-            colors,
-            createdBy: user.id,
-            images: uploadedImages.map((img) => ({
-              url: img.url,
-              key: img.key,
-            })),
-          })
-          .returning();
-
-        // Create product-category relationships
-        if (categoryIds.length > 0) {
-          await tx.insert(productCategory).values(
-            categoryIds.map((categoryId) => ({
-              productId: newProduct.id,
-              categoryId,
-            })),
-          );
-        }
-
-        return newProduct;
-      });
-
-      // Fetch the complete product with relations
-      const productWithRelations = await getProductById(result.id);
-
+      if (result.type === "fieldError") {
+        return c.json(
+          errorResponse(
+            "INVALID_DATA",
+            getErrDetailsFromErrFields(result.fieldErrors),
+            result.fieldErrors,
+          ),
+          HttpStatusCodes.BAD_REQUEST,
+        );
+      }
+      // serverError
       return c.json(
-        successResponse(productWithRelations, "Product created successfully"),
-        HttpStatusCodes.CREATED,
-      );
-    } catch (error) {
-      // If database transaction fails, clean up uploaded images
-      const deletePromises = uploadedImages.map((img) =>
-        deleteImageFromR2(img.key).catch(console.error),
-      );
-      await Promise.allSettled(deletePromises);
-
-      console.error("Error creating product:", error);
-      return c.json(
-        errorResponse("INTERNAL_SERVER_ERROR", "Failed to create product"),
+        errorResponse("INTERNAL_SERVER_ERROR", result.message),
         HttpStatusCodes.INTERNAL_SERVER_ERROR,
       );
     }
+
+    return c.json(
+      successResponse(result.data, "Product created successfully"),
+      HttpStatusCodes.CREATED,
+    );
   },
 );
 
@@ -449,334 +242,67 @@ products.put(
   validator("form", UpdateProductSchema, validationHook),
   async (c) => {
     const { id } = c.req.valid("param");
-    const rawFormData = c.req.valid("form");
+    const parsed = c.req.valid("form");
 
-    // Get existing product first
-    const existingProduct = await getProductById(id);
-    if (!existingProduct) {
+    // Fetch existing product — needed by the validator (keepImageKeys,
+    // effective stock) and by the service (to know which images to keep).
+    const existing = await getProductById(id);
+    if (!existing) {
       return c.json(
         errorResponse("NOT_FOUND", "Product not found"),
         HttpStatusCodes.NOT_FOUND,
       );
     }
 
-    // Validate and transform form data
-    const validationErrors: Record<string, string> = {};
+    // `keepImageKeys` defaults to "keep all existing" when the client
+    // omits the field entirely, but should be the actual array the client
+    // sent when present (even if empty, meaning "delete all"). Zod's
+    // `jsonArray` transform returns `[]` for both "missing" and "explicitly
+    // empty", so we distinguish by checking the raw form data: if the field
+    // is absent from the FormData, we pass the existing image keys as the
+    // default, preserving the original "keep everything" behaviour.
+    const rawForm = await c.req.parseBody();
+    const keepImageKeys =
+      parsed.keepImageKeys ??
+      (rawForm.keepImageKeys === undefined
+        ? existing.images.map((img) => img.key)
+        : []);
 
-    // Validate and transform price (if provided)
-    let price: string | undefined;
-    if (rawFormData.price !== undefined) {
-      const priceNum = Number.parseFloat(rawFormData.price);
-      if (Number.isNaN(priceNum) || priceNum <= 0) {
-        validationErrors.price = "Price must be a positive number";
-      } else {
-        price = priceNum.toFixed(2);
-      }
-    }
+    const result = await updateProduct(
+      id,
+      { ...parsed, keepImageKeys },
+      parsed.newImages ?? [],
+      existing,
+    );
 
-    // Validate and transform stockQuantity (if provided)
-    let stockQuantity: number | undefined;
-    if (rawFormData.stockQuantity !== undefined) {
-      const stockNum = Number.parseInt(rawFormData.stockQuantity, 10);
-      if (Number.isNaN(stockNum) || stockNum < 0) {
-        validationErrors.stockQuantity =
-          "Stock quantity must be a non-negative number";
-      } else {
-        stockQuantity = stockNum;
-      }
-    }
-
-    // Validate and transform sizes using Zod (if provided)
-    let sizes: { name: string; inStock: boolean }[] | undefined;
-    if (rawFormData.sizes !== undefined) {
-      const sizesResult = parseJsonField(
-        rawFormData.sizes,
-        z.array(InStockSchema),
-        "Sizes",
-      );
-      if (!sizesResult.success) {
-        validationErrors.sizes = sizesResult.error;
-      } else {
-        sizes = sizesResult.data;
-      }
-    }
-
-    if (sizes && sizes.length > 0) {
-      const sizeNames = sizes.map((s) => s.name.toLowerCase());
-      const uniqueSizeNames = new Set(sizeNames);
-      if (sizeNames.length !== uniqueSizeNames.size) {
-        validationErrors.sizes = "Size names must be unique (case-insensitive)";
-      } else {
-        const effectiveStock =
-          stockQuantity ?? existingProduct.stockQuantity ?? 0;
-        if (effectiveStock > 0 && !sizes.some((s) => s.inStock)) {
-          validationErrors.sizes =
-            "At least one size must be in stock when stock quantity is greater than 0";
-        }
-      }
-    }
-
-    // Validate and transform colors using Zod (if provided)
-    let colors: { name: string; inStock: boolean }[] | undefined;
-    if (rawFormData.colors !== undefined) {
-      const colorsResult = parseJsonField(
-        rawFormData.colors,
-        z.array(InStockSchema),
-        "Colors",
-      );
-      if (!colorsResult.success) {
-        validationErrors.colors = colorsResult.error;
-      } else {
-        colors = colorsResult.data;
-      }
-    }
-
-    if (colors && colors.length > 0) {
-      const colorNames = colors.map((c) => c.name.toLowerCase());
-      const uniqueColorNames = new Set(colorNames);
-      if (colorNames.length !== uniqueColorNames.size) {
-        validationErrors.colors =
-          "Color names must be unique (case-insensitive)";
-      } else {
-        const effectiveStock =
-          stockQuantity ?? existingProduct.stockQuantity ?? 0;
-        if (effectiveStock > 0 && !colors.some((c) => c.inStock)) {
-          validationErrors.colors =
-            "At least one color must be in stock when stock quantity is greater than 0";
-        }
-      }
-    }
-
-    // Validate and transform categoryIds using Zod (if provided)
-    let categoryIds: string[] | undefined;
-    if (rawFormData.categoryIds !== undefined) {
-      const categoryIdsResult = parseJsonField(
-        rawFormData.categoryIds,
-        z.array(z.string().uuid({ message: "Must be a valid UUID" })),
-        "Category IDs",
-      );
-      if (!categoryIdsResult.success) {
-        validationErrors.categoryIds = categoryIdsResult.error;
-      } else {
-        categoryIds = categoryIdsResult.data;
-      }
-    }
-
-    // Validate and transform keepImageKeys (if provided)
-    let keepImageKeys: string[] = [];
-    if (rawFormData.keepImageKeys !== undefined) {
-      const keepImageKeysResult = parseJsonField(
-        rawFormData.keepImageKeys,
-        z.array(z.string()),
-        "Keep Image Keys",
-      );
-      if (!keepImageKeysResult.success) {
-        validationErrors.keepImageKeys = keepImageKeysResult.error;
-      } else {
-        // Deduplicate keys
-        keepImageKeys = Array.from(new Set(keepImageKeysResult.data));
-
-        // Validate that all keepImageKeys exist in the current product
-        const currentImageKeys = new Set(
-          existingProduct.images.map((img) => img.key),
-        );
-        const invalidKeys = keepImageKeys.filter(
-          (key) => !currentImageKeys.has(key),
-        );
-
-        if (invalidKeys.length > 0) {
-          if (invalidKeys.length === 1) {
-            validationErrors.keepImageKeys = `Invalid image key: '${invalidKeys[0]}' doesn't exist in this product`;
-          } else {
-            validationErrors.keepImageKeys = `Invalid image keys: '${invalidKeys.join("', '")}' don't exist in this product`;
-          }
-        }
-      }
-    } else {
-      // If no keepImageKeys provided, keep all existing images
-      keepImageKeys = existingProduct.images.map((img) => img.key);
-    }
-
-    // Validate new images (if provided)
-    const newImages = rawFormData.newImages || [];
-    if (newImages.length > 0) {
-      newImages.forEach((file, index) => {
-        try {
-          validateFile(file, index);
-        } catch (error) {
-          validationErrors[`newImages.${index}`] =
-            error instanceof Error ? error.message : "Image validation failed";
-        }
-      });
-    }
-
-    // Validate total image count (kept + new)
-    const totalImageCount = keepImageKeys.length + newImages.length;
-    if (totalImageCount < 1) {
-      validationErrors.images = "Product must have at least 1 image";
-    } else if (totalImageCount > 3) {
-      validationErrors.images = "Maximum 3 images allowed";
-    }
-
-    // Return validation errors if any
-    if (Object.keys(validationErrors).length > 0) {
-      return c.json(
-        errorResponse(
-          "INVALID_DATA",
-          getErrDetailsFromErrFields(validationErrors),
-          validationErrors,
-        ),
-        HttpStatusCodes.BAD_REQUEST,
-      );
-    }
-
-    // Check if categories exist (only if categoryIds provided)
-    if (categoryIds && categoryIds.length > 0) {
-      const existingCategories = await db.query.category.findMany({
-        where: (category, { inArray }) => inArray(category.id, categoryIds),
-      });
-
-      if (existingCategories.length !== categoryIds.length) {
+    if (!result.ok) {
+      if (result.type === "fieldError") {
         return c.json(
-          errorResponse("INVALID_DATA", "One or more categories not found"),
+          errorResponse(
+            "INVALID_DATA",
+            getErrDetailsFromErrFields(result.fieldErrors),
+            result.fieldErrors,
+          ),
           HttpStatusCodes.BAD_REQUEST,
         );
       }
-    }
-
-    // Generate unique slug if name is being updated
-    let slug: string | undefined;
-    if (rawFormData.name && rawFormData.name.trim() !== existingProduct.name) {
-      const baseSlug = slugify(rawFormData.name.trim(), {
-        lower: true,
-        strict: true,
-      });
-
-      const existingSlugs = await db.query.product.findMany({
-        where: (product, { or, eq, like, and, ne }) =>
-          and(
-            or(eq(product.slug, baseSlug), like(product.slug, `${baseSlug}-%`)),
-            ne(product.id, id),
-          ),
-        columns: { slug: true },
-      });
-
-      const slugSet = new Set(existingSlugs.map((p) => p.slug));
-      let counter = 0;
-
-      while (true) {
-        const finalSlug = counter === 0 ? baseSlug : `${baseSlug}-${counter}`;
-
-        if (!slugSet.has(finalSlug)) {
-          slug = finalSlug;
-          break;
-        }
-        counter++;
-      }
-    }
-
-    // Upload new images to R2
-    let uploadedImages: { url: string; key: string }[] = [];
-    if (newImages.length > 0) {
-      const uploadPromises = newImages.map((image) =>
-        uploadImageToR2(image, "products"),
-      );
-      uploadedImages = await Promise.all(uploadPromises);
-    }
-
-    try {
-      const result = await db.transaction(async (tx) => {
-        // Prepare update data
-        // biome-ignore lint/suspicious/noExplicitAny: required
-        const updateData: any = {};
-
-        if (rawFormData.name) updateData.name = rawFormData.name.trim();
-        if (rawFormData.description !== undefined)
-          updateData.description = rawFormData.description?.trim();
-        if (price !== undefined) updateData.price = price;
-        if (stockQuantity !== undefined)
-          updateData.stockQuantity = stockQuantity;
-        if (sizes !== undefined) updateData.sizes = sizes;
-        if (colors !== undefined) updateData.colors = colors;
-        if (slug !== undefined) updateData.slug = slug;
-
-        // Handle images: combine kept images with new images
-        if (rawFormData.keepImageKeys !== undefined || newImages.length > 0) {
-          const keptImages = existingProduct.images.filter((img) =>
-            keepImageKeys.includes(img.key),
-          );
-          updateData.images = [...keptImages, ...uploadedImages];
-        }
-
-        // Check if there's anything to update
-        if (Object.keys(updateData).length === 0 && categoryIds === undefined) {
-          return existingProduct;
-        }
-
-        // Update product
-        const [updatedProduct] = await tx
-          .update(product)
-          .set(updateData)
-          .where(eq(product.id, id))
-          .returning();
-
-        // Update product-category relationships if categoryIds provided
-        if (categoryIds !== undefined) {
-          // Delete existing relationships
-          await tx
-            .delete(productCategory)
-            .where(eq(productCategory.productId, id));
-
-          // Insert new relationships
-          if (categoryIds.length > 0) {
-            await tx.insert(productCategory).values(
-              categoryIds.map((categoryId) => ({
-                productId: id,
-                categoryId,
-              })),
-            );
-          }
-        }
-
-        return updatedProduct;
-      });
-
-      // Delete old images that weren't kept (only if images were updated)
-      if (rawFormData.keepImageKeys !== undefined || newImages.length > 0) {
-        const imagesToDelete = existingProduct.images
-          .filter((img) => !keepImageKeys.includes(img.key))
-          .map((img) => img.key);
-
-        if (imagesToDelete.length > 0) {
-          const deletePromises = imagesToDelete.map((key) =>
-            deleteImageFromR2(key).catch(console.error),
-          );
-          await Promise.allSettled(deletePromises);
-        }
-      }
-
-      // Fetch the complete updated product with relations
-      const productWithRelations = await getProductById(result.id);
-
-      return c.json(
-        successResponse(productWithRelations, "Product updated successfully"),
-        HttpStatusCodes.OK,
-      );
-    } catch (error) {
-      // If database transaction fails, clean up newly uploaded images
-      if (uploadedImages.length > 0) {
-        const deletePromises = uploadedImages.map((img) =>
-          deleteImageFromR2(img.key).catch(console.error),
+      if (result.type === "imageError") {
+        return c.json(
+          errorResponse(result.code, result.error),
+          result.status as 422,
         );
-        await Promise.allSettled(deletePromises);
       }
-
-      console.error("Error updating product:", error);
+      // serverError | conflict
       return c.json(
-        errorResponse("INTERNAL_SERVER_ERROR", "Failed to update product"),
+        errorResponse("INTERNAL_SERVER_ERROR", result.message),
         HttpStatusCodes.INTERNAL_SERVER_ERROR,
       );
     }
+
+    return c.json(
+      successResponse(result.data, "Product updated successfully"),
+      HttpStatusCodes.OK,
+    );
   },
 );
 
@@ -788,82 +314,42 @@ products.delete(
   async (c) => {
     const { id } = c.req.valid("param");
 
-    // Get existing product first
-    const existingProduct = await getProductById(id);
-    if (!existingProduct) {
-      return c.json(
-        errorResponse("NOT_FOUND", "Product not found"),
-        HttpStatusCodes.NOT_FOUND,
-      );
-    }
+    const result = await deleteProduct(id);
 
-    // Check for dependencies - cart items
-    const cartItems = await db.query.cartItem.findMany({
-      where: (cartItem, { eq }) => eq(cartItem.productId, id),
-      columns: { id: true },
-    });
-
-    // Check for dependencies - order items
-    const orderItems = await db.query.orderItem.findMany({
-      where: (orderItem, { eq }) => eq(orderItem.productId, id),
-      columns: { id: true },
-    });
-
-    // Block deletion if product has dependencies
-    if (cartItems.length > 0 || orderItems.length > 0) {
-      let conflictMessage = "Product cannot be deleted as it exists in ";
-      const dependencies = [];
-
-      if (cartItems.length > 0) {
-        dependencies.push("user carts");
-      }
-
-      if (orderItems.length > 0) {
-        dependencies.push("orders");
-      }
-
-      conflictMessage += dependencies.join(" and ");
-
-      return c.json(
-        errorResponse("CONFLICT", conflictMessage),
-        HttpStatusCodes.CONFLICT,
-      );
-    }
-
-    try {
-      // Delete product in transaction (cascades to productCategory)
-      await db.transaction(async (tx) => {
-        // Delete product (productCategory will cascade automatically)
-        const [deletedProduct] = await tx
-          .delete(product)
-          .where(eq(product.id, id))
-          .returning();
-
-        return deletedProduct;
-      });
-
-      // After successful deletion, clean up images from R2
-      if (existingProduct.images.length > 0) {
-        const deletePromises = existingProduct.images.map((img) =>
-          deleteImageFromR2(img.key).catch((error) => {
-            console.error(`Failed to delete image ${img.key} from R2:`, error);
-            // Don't throw error - product is already deleted
-          }),
+    if (!result.ok) {
+      if (result.type === "conflict") {
+        return c.json(
+          errorResponse("CONFLICT", result.message),
+          HttpStatusCodes.CONFLICT,
         );
-        await Promise.allSettled(deletePromises);
       }
-
+      if (result.type === "fieldError") {
+        return c.json(
+          errorResponse(
+            "INVALID_DATA",
+            getErrDetailsFromErrFields(result.fieldErrors),
+            result.fieldErrors,
+          ),
+          HttpStatusCodes.BAD_REQUEST,
+        );
+      }
+      if (result.type === "imageError") {
+        return c.json(
+          errorResponse(result.code, result.error),
+          result.status as 422,
+        );
+      }
+      // serverError
       return c.json(
-        successResponse(existingProduct, "Product deleted successfully"),
-        HttpStatusCodes.OK,
-      );
-    } catch (error) {
-      console.error("Error deleting product:", error);
-      return c.json(
-        errorResponse("INTERNAL_SERVER_ERROR", "Failed to delete product"),
+        errorResponse("INTERNAL_SERVER_ERROR", result.message),
         HttpStatusCodes.INTERNAL_SERVER_ERROR,
       );
     }
+
+    return c.json(
+      successResponse(result.data, "Product deleted successfully"),
+      HttpStatusCodes.OK,
+    );
   },
 );
 

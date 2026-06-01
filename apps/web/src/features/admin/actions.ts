@@ -95,7 +95,6 @@ export interface CreateAdminProductInput {
   sizes?: { name: string; inStock: boolean }[];
   colors?: { name: string; inStock: boolean }[];
   images: File[];
-  createdBy: string;
 }
 
 export const createAdminProduct = async (input: CreateAdminProductInput) => {
@@ -104,7 +103,6 @@ export const createAdminProduct = async (input: CreateAdminProductInput) => {
   if (input.description) formData.append("description", input.description);
   formData.append("price", input.price);
   formData.append("stockQuantity", input.stockQuantity);
-  formData.append("createdBy", input.createdBy);
   formData.append("categoryIds", JSON.stringify(input.categoryIds));
   if (input.sizes && input.sizes.length > 0) {
     formData.append("sizes", JSON.stringify(input.sizes));

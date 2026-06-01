@@ -15,6 +15,13 @@
       "when": 1775960567070,
       "tag": "0001_uneven_inertia",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780339483382,
+      "tag": "0002_magenta_doorman",
+      "breakpoints": true
     }
   ]
 }

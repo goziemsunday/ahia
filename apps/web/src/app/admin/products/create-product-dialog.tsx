@@ -121,7 +121,6 @@ export function CreateProductDialog({
         colors: value.colors.length > 0 ? value.colors : undefined,
         categoryIds: value.categoryIds,
         images: value.images,
-        createdBy: user.id,
       });
     },
   });

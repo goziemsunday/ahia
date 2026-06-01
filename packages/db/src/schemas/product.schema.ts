@@ -33,10 +33,14 @@ export const product = pgTable("product", {
     .$type<{ url: string; key: string }[]>()
     .default([])
     .notNull(),
+  // `restrict` prevents deleting a user who has created products. This is
+  // the safe default for a financial record: admins should transfer ownership
+  // manually if needed. The prior `set null` was contradictory with `.notNull()`
+  // (Postgres would reject the `set null` on a not-null column anyway).
   createdBy: uuid("created_by")
     .notNull()
     .references(() => user.id, {
-      onDelete: "set null",
+      onDelete: "restrict",
     }),
   ...timestamps,
 });

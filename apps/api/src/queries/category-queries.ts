@@ -1,4 +1,4 @@
-import { count, db } from "@repo/db";
+import { count, db, inArray } from "@repo/db";
 import { category } from "@repo/db/schemas/product.schema";
 
 /** Fetches categories with optional pagination and total count */
@@ -24,6 +24,15 @@ export const getCategories = async (page: number = 1, limit?: number) => {
   const total = totalResult[0].count;
 
   return { categories, total };
+};
+
+/** Fetches categories with their IDs */
+export const getCategoriesById = async (ids: string[]) => {
+  const categories = await db.query.category.findMany({
+    where: (c) => inArray(c.id, ids),
+  });
+
+  return categories;
 };
 
 /** Fetches a single category with its related products */

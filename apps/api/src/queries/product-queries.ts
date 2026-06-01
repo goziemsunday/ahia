@@ -2,6 +2,17 @@ import { count, db, desc, ilike, sql, sum } from "@repo/db";
 import { orderItem } from "@repo/db/schemas/order.schema";
 import { product } from "@repo/db/schemas/product.schema";
 
+import { DbOrTx } from "@/types";
+
+/**
+ * Return type of `getProductById`. Exported so other modules (e.g.
+ * the product service) can reference the shape without re-querying or
+ * duplicating the type definition.
+ */
+export type ProductWithRelations = NonNullable<
+  Awaited<ReturnType<typeof getProductById>>
+>;
+
 /** Fetches products with related creator and categories, plus total count */
 export const getProducts = async (page: number = 1, limit?: number) => {
   let result;
@@ -45,9 +56,17 @@ export const getProducts = async (page: number = 1, limit?: number) => {
   return { products, total };
 };
 
-/** Fetches a single product with creator and categories */
-export const getProductById = async (id: string) => {
-  const result = await db.query.product.findFirst({
+/**
+ * Fetches a single product with creator and categories.
+ *
+ * `executor` is optional — defaults to the global `db` instance. When
+ * passed a transaction object (from `db.transaction(async (tx) => ...)`),
+ * the read is part of the same transaction as the write, giving the
+ * caller a consistent snapshot. The product service uses this inside its
+ * transactions so the post-insert/update refetch sees its own writes.
+ */
+export const getProductById = async (id: string, executor: DbOrTx = db) => {
+  const result = await executor.query.product.findFirst({
     where: (p, { eq }) => eq(p.id, id),
     with: {
       creator: true,
