@@ -21,14 +21,3 @@ export const $fetchAndThrow = createFetch({
   credentials: "include",
   errorSchema: errorResSchema,
 });
-
-export const $fetchAndRetry = createFetch({
-  baseURL,
-  retry: {
-    type: "linear",
-    attempts: 2,
-    delay: 500,
-  },
-  credentials: "include",
-  errorSchema: errorResSchema,
-});

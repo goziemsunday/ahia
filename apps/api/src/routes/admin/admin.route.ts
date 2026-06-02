@@ -8,8 +8,8 @@ import { ListUsersQuerySchema } from "@repo/db/validators/admin.validator";
 import { createRouter } from "@/app";
 import { auth } from "@/lib/auth";
 import HttpStatusCodes from "@/lib/http-status-codes";
-import { PaginationQuerySchema } from "@/lib/schemas";
-import { errorResponse, successResponse } from "@/lib/utils";
+import { PaginationQuerySchema, UuidParamSchema } from "@/lib/schemas";
+import { buildPagination, errorResponse, successResponse } from "@/lib/utils";
 import { authed } from "@/middleware/authed";
 import { permit } from "@/middleware/permit";
 import { validationHook } from "@/middleware/validation-hook";
@@ -92,7 +92,7 @@ admin.get(
 admin.get(
   "/users/:id",
   getUserDoc,
-  validator("param", z.object({ id: z.uuid() }), validationHook),
+  validator("param", UuidParamSchema, validationHook),
   async (c) => {
     try {
       const { id } = c.req.valid("param");
@@ -135,15 +135,7 @@ admin.get(
       const { page, limit } = c.req.valid("query");
       const { orders: allOrders, total } = await getAllOrders(page, limit);
 
-      let pagination;
-      if (limit) {
-        pagination = {
-          page: page ?? 1,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        };
-      }
+      const pagination = buildPagination(page, limit, total);
 
       return c.json(
         successResponse(allOrders, "Orders retrieved successfully", pagination),
@@ -163,7 +155,7 @@ admin.get(
 admin.get(
   "/orders/:id",
   getAdminOrderDoc,
-  validator("param", z.object({ id: z.uuid() }), validationHook),
+  validator("param", UuidParamSchema, validationHook),
   async (c) => {
     try {
       const { id } = c.req.valid("param");

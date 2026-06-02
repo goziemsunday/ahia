@@ -1,17 +1,18 @@
 import { validator } from "hono-openapi";
-import { z } from "zod";
 
 import { createRouter } from "@/app";
 import HttpStatusCodes from "@/lib/http-status-codes";
 import { getErrDetailsFromErrFields } from "@/lib/openapi";
 import {
   CreateProductSchema,
+  LimitQuerySchema,
   PaginationQuerySchema,
   SearchQuerySchema,
   ShopQuerySchema,
+  UuidParamSchema,
   UpdateProductSchema,
 } from "@/lib/schemas";
-import { errorResponse, successResponse } from "@/lib/utils";
+import { buildPagination, errorResponse, successResponse } from "@/lib/utils";
 import { authed } from "@/middleware/authed";
 import { permit } from "@/middleware/permit";
 import { validationHook } from "@/middleware/validation-hook";
@@ -56,9 +57,9 @@ products.get(
     const { page, limit } = c.req.valid("query");
     const { products: allProducts, total } = await getProducts(page, limit);
 
-    const pagination = limit
-      ? { page: page ?? 1, limit, total, totalPages: Math.ceil(total / limit) }
-      : undefined;
+    // Use the shared helper instead of the inline ternary with
+    // `Math.ceil(total / limit)`.
+    const pagination = buildPagination(page, limit, total);
 
     return c.json(
       successResponse(
@@ -90,11 +91,7 @@ products.get("/featured", getFeaturedProductDoc, async (c) => {
 products.get(
   "/latest",
   getLatestProductsDoc,
-  validator(
-    "query",
-    z.object({ limit: z.coerce.number().int().positive().optional() }),
-    validationHook,
-  ),
+  validator("query", LimitQuerySchema, validationHook),
   async (c) => {
     const { limit } = c.req.valid("query");
     const latest = await getLatestProducts(limit ?? 4);
@@ -109,11 +106,7 @@ products.get(
 products.get(
   "/trending",
   getTrendingProductsDoc,
-  validator(
-    "query",
-    z.object({ limit: z.coerce.number().int().positive().optional() }),
-    validationHook,
-  ),
+  validator("query", LimitQuerySchema, validationHook),
   async (c) => {
     const { limit } = c.req.valid("query");
     const trending = await getTrendingProducts(limit ?? 4);
@@ -171,7 +164,7 @@ products.get(
 products.get(
   "/:id",
   getProductDoc,
-  validator("param", z.object({ id: z.uuid() }), validationHook),
+  validator("param", UuidParamSchema, validationHook),
   async (c) => {
     const { id } = c.req.valid("param");
     const found = await getProductById(id);
@@ -238,7 +231,7 @@ products.post(
 products.put(
   "/:id",
   updateProductDoc,
-  validator("param", z.object({ id: z.uuid() }), validationHook),
+  validator("param", UuidParamSchema, validationHook),
   validator("form", UpdateProductSchema, validationHook),
   async (c) => {
     const { id } = c.req.valid("param");
@@ -310,7 +303,7 @@ products.put(
 products.delete(
   "/:id",
   deleteProductDoc,
-  validator("param", z.object({ id: z.uuid() }), validationHook),
+  validator("param", UuidParamSchema, validationHook),
   async (c) => {
     const { id } = c.req.valid("param");
 

@@ -16,7 +16,7 @@ import {
 import {
   defaultAdminCategoriesListParams,
   defaultAdminProductsListParams,
-  defaultAdminsOrdersListParams,
+  defaultAdminOrdersListParams,
   defaultAdminUsersListParams,
   getAdminCategories,
   getAdminOrders,
@@ -61,8 +61,8 @@ const AdminAuthWrapper = async ({ children }: { children: ReactNode }) => {
 
   // Orders
   await queryClient.prefetchQuery({
-    queryKey: queryKeys.adminOrders(defaultAdminsOrdersListParams),
-    queryFn: async () => getAdminOrders(defaultAdminsOrdersListParams, cookie),
+    queryKey: queryKeys.adminOrders(defaultAdminOrdersListParams),
+    queryFn: async () => getAdminOrders(defaultAdminOrdersListParams, cookie),
   });
 
   return (

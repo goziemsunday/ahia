@@ -9,7 +9,15 @@ export type AppEnv = {
   };
 };
 
+// Keep in sync with the role exports in `@repo/permissions` (user, admin,
+// superadmin). During the NestJS migration, this should be derived from
+// the permissions package to avoid manual drift.
 export type Role = "user" | "admin" | "superadmin";
+
+/**
+ * Canonical image reference type.
+ */
+export type ImageRef = { url: string; key: string };
 
 /**
  * Union type representing either the global `db` instance or a Drizzle

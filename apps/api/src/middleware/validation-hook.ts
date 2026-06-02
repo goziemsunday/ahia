@@ -75,36 +75,3 @@ export const validationHook = (result: ValidationResult, c: Context) => {
     );
   }
 };
-
-/**
- * Creates a validation hook with custom error code.
- *
- * Usage:
- * ```ts
- * validator("json", schema, createValidationHook("CUSTOM_ERROR_CODE"))
- * ```
- */
-export const createValidationHook = (errorCode: string) => {
-  return (result: ValidationResult, c: Context) => {
-    if (!result.success && result.error) {
-      const fields: Record<string, string> = {};
-      let details = "";
-
-      result.error.forEach((issue, index) => {
-        const fieldPath = pathToString(issue.path);
-        fields[fieldPath || "value"] = issue.message;
-
-        if (index === 0) {
-          details = fieldPath
-            ? `${fieldPath}: ${issue.message}`
-            : issue.message;
-        }
-      });
-
-      return c.json(
-        errorResponse(errorCode, details, fields),
-        HttpStatusCodes.BAD_REQUEST,
-      );
-    }
-  };
-};

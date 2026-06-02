@@ -1,28 +1,12 @@
+import type { ImageRef } from "@/types";
+
 import {
   MAX_PRODUCT_IMAGES,
   MIN_PRODUCT_IMAGES,
   validateFile,
   validateProductImages,
 } from "./file";
-
-/**
- * Item shape for a size or color variant. Matches the `InStockSchema` in
- * lib/schemas.ts; redeclared here to avoid a circular import between
- * schemas.ts and this file.
- */
-export interface InStockItem {
-  name: string;
-  inStock: boolean;
-}
-
-/**
- * An image stored on a product row. Matches the jsonb `$type<>` declared
- * on the `images` column in the product schema.
- */
-export interface ProductImageRef {
-  url: string;
-  key: string;
-}
+import type { InStockItem } from "./schemas";
 
 /**
  * Fully-normalized input ready to be inserted/updated on a product. The
@@ -235,7 +219,7 @@ export interface RawUpdateInput {
 
 export interface ExistingProductForUpdate {
   stockQuantity: number;
-  images: ProductImageRef[];
+  images: ImageRef[];
 }
 
 export const validateUpdateProductInput = (

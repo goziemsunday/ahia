@@ -5,7 +5,6 @@ import {
   cleanupUploadedImages,
   uploadProductImages,
   withImageRollback,
-  type UploadedImage,
 } from "@/lib/image-upload";
 import { generateUniqueProductSlug, product } from "@/lib/product-slug";
 import {
@@ -22,6 +21,7 @@ import {
   getProductById,
   type ProductWithRelations,
 } from "@/queries/product-queries";
+import { ImageRef } from "@/types";
 
 // ── result types ────────────────────────────────────────────────────
 
@@ -280,7 +280,7 @@ export const updateProduct = async (
   }
 
   // ── 6. upload new images to R2 ──────────────────────────────────
-  let uploaded: UploadedImage[] = [];
+  let uploaded: ImageRef[] = [];
   if (newImagesArray.length > 0) {
     uploaded = await uploadProductImages(newImagesArray as File[]);
   }

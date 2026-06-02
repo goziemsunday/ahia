@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/data-table";
 import {
   type AdminOrderRow,
-  defaultAdminsOrdersListParams,
+  defaultAdminOrdersListParams,
   getAdminOrders,
 } from "@/features/admin/queries";
 import { queryKeys } from "@/lib/query-keys";
@@ -176,11 +176,11 @@ export const OrdersClient = () => {
   const [detailOrder, setDetailOrder] = useState<AdminOrderRow | null>(null);
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
-    pageSize: defaultAdminsOrdersListParams.limit!,
+    pageSize: defaultAdminOrdersListParams.limit!,
   });
 
   const queryParams = {
-    ...defaultAdminsOrdersListParams,
+    ...defaultAdminOrdersListParams,
     page: pagination.pageIndex + 1,
     limit: pagination.pageSize,
   };

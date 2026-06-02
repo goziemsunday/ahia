@@ -1,31 +1,23 @@
 import { validator } from "hono-openapi";
 import { z } from "zod";
 
-import { db, eq } from "@repo/db";
-import { order } from "@repo/db/schemas/order.schema";
-
 import { createRouter } from "@/app";
 import { sendOrderReceiptEmail } from "@/lib/email";
 import env from "@/lib/env";
 import HttpStatusCodes from "@/lib/http-status-codes";
-import { PaginationQuerySchema } from "@/lib/schemas";
+import { PaginationQuerySchema, UuidParamSchema } from "@/lib/schemas";
 import { stripe } from "@/lib/stripe";
-import { errorResponse, successResponse } from "@/lib/utils";
+import { buildPagination, errorResponse, successResponse } from "@/lib/utils";
 import { authed } from "@/middleware/authed";
 import { validationHook } from "@/middleware/validation-hook";
+import { clearCartItemsByUserId } from "@/queries/cart-queries";
 import {
-  clearCartItemsByUserId,
-  getUserCartWithItems,
-} from "@/queries/cart-queries";
-import {
-  createOrder,
-  createOrderItems,
   getOrderById,
   getOrderByStripeSessionId,
   getUserOrders,
-  reserveStock,
   updateOrderStatus,
 } from "@/queries/order-queries";
+import { createCheckout } from "@/services/order-service";
 
 import {
   createCheckoutDoc,
@@ -52,15 +44,7 @@ orders.get(
         limit,
       );
 
-      let pagination;
-      if (limit) {
-        pagination = {
-          page: page ?? 1,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        };
-      }
+      const pagination = buildPagination(page, limit, total);
 
       return c.json(
         successResponse(
@@ -84,7 +68,7 @@ orders.get(
 orders.get(
   "/:id",
   getUserOrderDoc,
-  validator("param", z.object({ id: z.uuid() }), validationHook),
+  validator("param", UuidParamSchema, validationHook),
   async (c) => {
     const user = c.get("user");
     const { id } = c.req.valid("param");
@@ -201,170 +185,38 @@ orders.post(
 orders.post("/create-checkout", createCheckoutDoc, async (c) => {
   const user = c.get("user");
 
-  try {
-    // Get user's cart with items
-    const userCart = await getUserCartWithItems(user.id);
+  const result = await createCheckout(user.id, user.email);
 
-    if (!userCart || userCart.cartItems.length === 0) {
+  if (!result.ok) {
+    if (result.type === "emptyCart") {
       return c.json(
-        errorResponse(
-          "INVALID_DATA",
-          "Cart is empty. Add items to cart before creating order.",
-        ),
+        errorResponse("INVALID_DATA", result.message),
         HttpStatusCodes.BAD_REQUEST,
       );
     }
-
-    // Validate cart items and stock availability
-    const cartValidationErrors: { code: string; details: string }[] = [];
-    let totalAmount = 0;
-
-    for (const cartItem of userCart.cartItems) {
-      // Check if product still exists
-      if (!cartItem.product) {
-        cartValidationErrors.push({
-          code: "INVALID_CART_STATE",
-          details: `Product with ID "${cartItem.productId}" no longer exists`,
-        });
-        continue;
-      }
-
-      // Check stock availability
-      const availableStock = cartItem.product.stockQuantity || 0;
-      if (cartItem.quantity > availableStock) {
-        cartValidationErrors.push({
-          code: "INSUFFICIENT_STOCK",
-          details: `Not enough stock for "${cartItem.product.name}". Requested: ${cartItem.quantity}, Available: ${availableStock}`,
-        });
-        continue;
-      }
-
-      // Calculate total
-      totalAmount += parseFloat(cartItem.product.price) * cartItem.quantity;
-    }
-
-    // Return validation errors if any
-    if (cartValidationErrors.length > 0) {
+    if (result.type === "validationError") {
       return c.json(
-        errorResponse(
-          cartValidationErrors[0].code,
-          cartValidationErrors[0].details,
-        ),
+        errorResponse(result.code, result.message),
         HttpStatusCodes.UNPROCESSABLE_ENTITY,
       );
     }
-
-    // Create order and checkout session in transaction
-    const result = await db.transaction(async () => {
-      // This will create the order with null stripeCheckoutSessionId.
-      // After creating the Stripe session, it will update the order with the actual session ID.
-      const newOrder = await createOrder(
-        user.id,
-        user.email,
-        totalAmount.toFixed(2),
-      );
-
-      // Create order items with frozen prices
-      const orderItemsData = userCart.cartItems.map((cartItem) => ({
-        productId: cartItem.productId,
-        quantity: cartItem.quantity,
-        unitPrice: cartItem.product.price,
-      }));
-
-      // This will create the order items from the cart items with frozen prices.
-      await createOrderItems(newOrder.id, orderItemsData);
-
-      // Reserve stock immediately
-      const stockReservationData = userCart.cartItems.map((cartItem) => ({
-        productId: cartItem.productId,
-        quantity: cartItem.quantity,
-      }));
-
-      // This will reserve stock for the order items.
-      await reserveStock(stockReservationData);
-
-      // This will create the Stripe Checkout session.
-      // Create Stripe Checkout Session
-      const checkoutSession = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: userCart.cartItems.map((cartItem) => ({
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: cartItem.product.name,
-              description: cartItem.product.description || undefined,
-              images: cartItem.product.images
-                .map((img) => img.url)
-                .filter((url): url is string => Boolean(url)),
-            },
-            unit_amount: Math.round(parseFloat(cartItem.product.price) * 100),
-          },
-          quantity: cartItem.quantity,
-        })),
-        mode: "payment",
-        success_url: `${env.WEB_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${env.WEB_URL}/checkout/cancel`,
-        customer_email: user.email,
-        client_reference_id: newOrder.id,
-        metadata: {
-          orderId: newOrder.id,
-          orderNumber: newOrder.orderNumber,
-          userId: user.id,
-        },
-        shipping_address_collection: {
-          allowed_countries: ["US", "CA", "GB", "AU", "NG", "GH"],
-        },
-        billing_address_collection: "required",
-        expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
-      });
-
-      // Update order with checkout session ID since it was set as null when
-      // the order was initially created
-      // Update order with Stripe session ID
-      await db
-        .update(order)
-        .set({
-          stripeCheckoutSessionId: checkoutSession.id,
-        })
-        .where(eq(order.id, newOrder.id));
-
-      return {
-        order: newOrder,
-        checkoutSession,
-      };
-    });
-
-    // Fetch complete order with relations
-    const orderWithItems = await getOrderById(result.order.id);
-
-    if (!orderWithItems) {
-      return c.json(
-        errorResponse(
-          "INTERNAL_SERVER_ERROR",
-          "Failed to retrieve created order",
-        ),
-        HttpStatusCodes.INTERNAL_SERVER_ERROR,
-      );
-    }
-
-    const checkoutResponse = {
-      order: orderWithItems,
-      checkoutUrl: result.checkoutSession.url,
-      checkoutSessionId: result.checkoutSession.id,
-      stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY,
-    };
-
     return c.json(
-      successResponse(checkoutResponse, "Order created successfully"),
-      HttpStatusCodes.OK,
-    );
-  } catch (error) {
-    console.error("Error creating order:", error);
-    return c.json(
-      errorResponse("INTERNAL_SERVER_ERROR", "Failed to create order"),
+      errorResponse("INTERNAL_SERVER_ERROR", result.message),
       HttpStatusCodes.INTERNAL_SERVER_ERROR,
     );
   }
+
+  const checkoutResponse = {
+    order: result.data.order,
+    checkoutUrl: result.data.checkoutUrl,
+    checkoutSessionId: result.data.checkoutSessionId,
+    stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY,
+  };
+
+  return c.json(
+    successResponse(checkoutResponse, "Order created successfully"),
+    HttpStatusCodes.OK,
+  );
 });
 
 export default orders;

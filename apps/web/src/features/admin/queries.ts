@@ -204,7 +204,7 @@ export type AdminOrdersListParams = {
   limit?: number;
 };
 
-export const defaultAdminsOrdersListParams: AdminOrdersListParams = {
+export const defaultAdminOrdersListParams: AdminOrdersListParams = {
   page: 1,
   limit: 50,
 };

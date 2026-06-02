@@ -3,14 +3,33 @@ import { z } from "zod";
 // ── shared primitives ────────────────────────────────────────────────
 
 /**
+ * Reusable param schema for routes that take a UUID `:id` path parameter.
+ */
+export const UuidParamSchema = z.object({ id: z.uuid() });
+
+/**
+ * Reusable query schema for routes that accept an optional `limit` param
+ * (e.g. "top N categories").
+ * Distinct from `PaginationQuerySchema` which also includes `page`.
+ */
+export const LimitQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().optional(),
+});
+
+/**
  * InStock item shape, used for both sizes and colors variants.
  * Declared at file scope because it's referenced by the JSON-parse
  * transforms below and re-exported for use in OpenAPI docs.
+ *
+ * `InStockItem` is the TS type derived from this schema — the canonical
+ * source of truth.
  */
 export const InStockSchema = z.object({
   name: z.string().min(1, { error: "Name is required" }),
   inStock: z.boolean(),
 });
+
+export type InStockItem = z.infer<typeof InStockSchema>;
 
 /**
  * Parse a JSON-stringified array field. If the raw value is undefined or

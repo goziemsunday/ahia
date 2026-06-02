@@ -17,20 +17,42 @@ export const buildBaseSlug = (name: string): string =>
   slugifyLib(name.trim(), { lower: true, strict: true });
 
 /**
+ * Resolve slug collisions by walking `-1`, `-2`, ... until a free slug
+ * is found.
+ *
+ * @param baseSlug - The initial slug (from `buildBaseSlug`)
+ * @param taken - Set of slugs already in use on the target table
+ * @returns The first slug not in `taken`
+ */
+const resolveSlugCollision = (baseSlug: string, taken: Set<string>): string => {
+  let counter = 0;
+  while (true) {
+    const candidate = counter === 0 ? baseSlug : `${baseSlug}-${counter}`;
+    if (!taken.has(candidate)) {
+      return candidate;
+    }
+    counter++;
+  }
+};
+
+/**
  * Find a slug derived from `baseSlug` that does not already exist on the
  * product table. If `baseSlug` is free, returns it. Otherwise appends
  * `-1`, `-2`, ... until a free one is found.
  *
  * `excludeProductId` lets update flows skip the row being updated (otherwise
  * renaming a product to its own current name would always collide).
+ *
+ * `executor` is optional; pass a transaction to read inside one.
  */
 export const generateUniqueProductSlug = async (
   baseSlug: string,
   excludeProductId?: string,
+  executor: DbOrTx = db,
 ): Promise<string> => {
   // Pull every slug that could collide with our base or any `-N` suffix.
   // This is one query, not N — we just need the set of taken suffixes.
-  const existingSlugs = await db.query.product.findMany({
+  const existingSlugs = await executor.query.product.findMany({
     where: excludeProductId
       ? (p) =>
           and(
@@ -41,17 +63,10 @@ export const generateUniqueProductSlug = async (
     columns: { slug: true },
   });
 
-  const taken = new Set(existingSlugs.map((p) => p.slug));
-
-  // Walk 0, 1, 2, ... until we find an unused suffix. `0` means no suffix.
-  let counter = 0;
-  while (true) {
-    const candidate = counter === 0 ? baseSlug : `${baseSlug}-${counter}`;
-    if (!taken.has(candidate)) {
-      return candidate;
-    }
-    counter++;
-  }
+  return resolveSlugCollision(
+    baseSlug,
+    new Set(existingSlugs.map((p) => p.slug)),
+  );
 };
 
 /**
@@ -78,15 +93,25 @@ export const findProductBySlug = async (
  * categories route can perform that check without re-implementing the SQL
  * expression every time.
  *
+ * `excludeCategoryId` lets update flows skip the row being updated (otherwise
+ * renaming a category to its own current name would always collide).
+ *
  * `executor` is optional; pass a transaction to read inside one.
  */
 export const findCategoryByCaseInsensitiveName = async (
   name: string,
+  excludeCategoryId?: string,
   executor: DbOrTx = db,
 ) => {
   const trimmed = name.trim();
   return executor.query.category.findFirst({
-    where: (c) => sql`LOWER(${c.name}) = LOWER(${trimmed})`,
+    where: excludeCategoryId
+      ? (c) =>
+          and(
+            sql`LOWER(${c.name}) = LOWER(${trimmed})`,
+            ne(c.id, excludeCategoryId),
+          )
+      : (c) => sql`LOWER(${c.name}) = LOWER(${trimmed})`,
   });
 };
 
@@ -98,12 +123,15 @@ export const findCategoryByCaseInsensitiveName = async (
  * service) because the collision-resolution algorithm is identical to the
  * product one. The caller is responsible for the *name* uniqueness check
  * separately, via `findCategoryByCaseInsensitiveName`.
+ *
+ * `executor` is optional; pass a transaction to read inside one.
  */
 export const generateUniqueCategorySlug = async (
   baseSlug: string,
   excludeCategoryId?: string,
+  executor: DbOrTx = db,
 ): Promise<string> => {
-  const existingSlugs = await db.query.category.findMany({
+  const existingSlugs = await executor.query.category.findMany({
     where: excludeCategoryId
       ? (c) =>
           and(
@@ -114,16 +142,10 @@ export const generateUniqueCategorySlug = async (
     columns: { slug: true },
   });
 
-  const taken = new Set(existingSlugs.map((c) => c.slug));
-
-  let counter = 0;
-  while (true) {
-    const candidate = counter === 0 ? baseSlug : `${baseSlug}-${counter}`;
-    if (!taken.has(candidate)) {
-      return candidate;
-    }
-    counter++;
-  }
+  return resolveSlugCollision(
+    baseSlug,
+    new Set(existingSlugs.map((c) => c.slug)),
+  );
 };
 
 // Re-export the `category` and `product` tables so callers don't need a

@@ -1,9 +1,6 @@
-import { deleteImageFromR2, uploadImageToR2 } from "./r2";
+import type { ImageRef as UploadedImage } from "@/types";
 
-export interface UploadedImage {
-  url: string;
-  key: string;
-}
+import { deleteImageFromR2, uploadImageToR2 } from "./r2";
 
 /**
  * Upload a batch of files to R2 in parallel, preserving order. If any single

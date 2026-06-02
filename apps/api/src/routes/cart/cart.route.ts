@@ -1,5 +1,4 @@
 import { validator } from "hono-openapi";
-import { z } from "zod";
 
 import { db } from "@repo/db";
 import {
@@ -9,6 +8,7 @@ import {
 
 import { createRouter } from "@/app";
 import HttpStatusCodes from "@/lib/http-status-codes";
+import { UuidParamSchema } from "@/lib/schemas";
 import { errorResponse, successResponse } from "@/lib/utils";
 import { authed } from "@/middleware/authed";
 import { validationHook } from "@/middleware/validation-hook";
@@ -24,6 +24,7 @@ import {
 } from "@/queries/cart-queries";
 import { getProductById } from "@/queries/product-queries";
 
+import { buildCartResponse, checkStockAvailability } from "./cart-helpers";
 import {
   addToCartDoc,
   clearCartDoc,
@@ -48,37 +49,7 @@ cart.get("/", getUserCartDoc, async (c) => {
       );
     }
 
-    let totalItems = 0;
-    let totalAmount = 0;
-
-    const cartItemsWithSubtotals = userCart.cartItems.map((item) => {
-      const subAmount = (
-        parseFloat(item.product.price) * item.quantity
-      ).toFixed(2);
-      totalItems += item.quantity;
-      totalAmount += parseFloat(subAmount);
-
-      return {
-        id: item.id,
-        cartId: item.cartId,
-        productId: item.productId,
-        quantity: item.quantity,
-        subAmount,
-        product: item.product,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      };
-    });
-
-    const cartResponse = {
-      id: userCart.id,
-      userId: userCart.userId,
-      cartItems: cartItemsWithSubtotals,
-      totalItems,
-      totalAmount: totalAmount.toFixed(2),
-      createdAt: userCart.createdAt,
-      updatedAt: userCart.updatedAt,
-    };
+    const cartResponse = buildCartResponse(userCart);
 
     return c.json(
       successResponse(cartResponse, "Cart retrieved successfully"),
@@ -125,28 +96,18 @@ cart.post(
       // Check if product already in cart
       const existingCartItem = await getCartItem(userCart.id, productId);
 
-      let totalRequestedQuantity = quantity;
-      if (existingCartItem) {
-        totalRequestedQuantity = existingCartItem.quantity + quantity;
-      }
+      const totalRequestedQuantity =
+        quantity + (existingCartItem?.quantity ?? 0);
 
-      const productStockQty = product.stockQuantity || 0;
+      const stockCheck = checkStockAvailability(
+        totalRequestedQuantity,
+        product.stockQuantity || 0,
+        existingCartItem?.quantity ?? 0,
+      );
 
-      // Validate stock availability
-      if (totalRequestedQuantity > productStockQty) {
-        let errorMessage: string;
-
-        if (productStockQty === 0) {
-          errorMessage = "Product is currently out of stock. Available: 0";
-        } else if (existingCartItem) {
-          const maxCanAdd = productStockQty - existingCartItem.quantity;
-          errorMessage = `Not enough stock available. You have ${existingCartItem.quantity} in cart, requested ${quantity} more, but only ${productStockQty} available total. Maximum you can add: ${maxCanAdd}`;
-        } else {
-          errorMessage = `Not enough stock available. Requested: ${quantity}, Available: ${productStockQty}. Maximum you can add: ${productStockQty}`;
-        }
-
+      if (!stockCheck.ok) {
         return c.json(
-          errorResponse("INSUFFICIENT_STOCK", errorMessage),
+          errorResponse("INSUFFICIENT_STOCK", stockCheck.errorMessage),
           HttpStatusCodes.UNPROCESSABLE_ENTITY,
         );
       }
@@ -175,38 +136,8 @@ cart.post(
         );
       }
 
-      // Calculate totals
-      let totalItems = 0;
-      let totalAmount = 0;
-
-      const cartItemsWithSubtotals = updatedCart.cartItems.map((item) => {
-        const subAmount = (
-          parseFloat(item.product.price) * item.quantity
-        ).toFixed(2);
-        totalItems += item.quantity;
-        totalAmount += parseFloat(subAmount);
-
-        return {
-          id: item.id,
-          cartId: item.cartId,
-          productId: item.productId,
-          quantity: item.quantity,
-          subAmount,
-          product: item.product,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-        };
-      });
-
-      const cartResponse = {
-        id: updatedCart.id,
-        userId: updatedCart.userId,
-        cartItems: cartItemsWithSubtotals,
-        totalItems,
-        totalAmount: totalAmount.toFixed(2),
-        createdAt: updatedCart.createdAt,
-        updatedAt: updatedCart.updatedAt,
-      };
+      // Use the shared helper instead of inline map/reduce.
+      const cartResponse = buildCartResponse(updatedCart);
 
       return c.json(
         successResponse(cartResponse, "Product added to cart successfully"),
@@ -226,7 +157,7 @@ cart.post(
 cart.put(
   "/items/:id",
   updateCartItemDoc,
-  validator("param", z.object({ id: z.uuid() }), validationHook),
+  validator("param", UuidParamSchema, validationHook),
   validator("json", UpdateCartItemSchema, validationHook),
   async (c) => {
     const user = c.get("user");
@@ -257,19 +188,14 @@ cart.put(
 
       // Validate stock availability (only if quantity is increasing)
       if (quantity > cartItemWithDetails.quantity) {
-        const productStockQty = cartItemWithDetails.product.stockQuantity || 0;
+        const stockCheck = checkStockAvailability(
+          quantity,
+          cartItemWithDetails.product.stockQuantity || 0,
+        );
 
-        if (quantity > productStockQty) {
-          let errorMessage: string;
-
-          if (productStockQty === 0) {
-            errorMessage = "Product is currently out of stock. Available: 0";
-          } else {
-            errorMessage = `Not enough stock available. Requested: ${quantity}, Available: ${productStockQty}. Maximum quantity: ${productStockQty}`;
-          }
-
+        if (!stockCheck.ok) {
           return c.json(
-            errorResponse("INSUFFICIENT_STOCK", errorMessage),
+            errorResponse("INSUFFICIENT_STOCK", stockCheck.errorMessage),
             HttpStatusCodes.UNPROCESSABLE_ENTITY,
           );
         }
@@ -292,38 +218,7 @@ cart.put(
         );
       }
 
-      // Calculate totals
-      let totalItems = 0;
-      let totalAmount = 0;
-
-      const cartItemsWithSubtotals = updatedCart.cartItems.map((item) => {
-        const subAmount = (
-          parseFloat(item.product.price) * item.quantity
-        ).toFixed(2);
-        totalItems += item.quantity;
-        totalAmount += parseFloat(subAmount);
-
-        return {
-          id: item.id,
-          cartId: item.cartId,
-          productId: item.productId,
-          quantity: item.quantity,
-          subAmount,
-          product: item.product,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-        };
-      });
-
-      const cartResponse = {
-        id: updatedCart.id,
-        userId: updatedCart.userId,
-        cartItems: cartItemsWithSubtotals,
-        totalItems,
-        totalAmount: totalAmount.toFixed(2),
-        createdAt: updatedCart.createdAt,
-        updatedAt: updatedCart.updatedAt,
-      };
+      const cartResponse = buildCartResponse(updatedCart);
 
       return c.json(
         successResponse(cartResponse, "Cart item updated successfully"),
@@ -343,7 +238,7 @@ cart.put(
 cart.delete(
   "/items/:id",
   deleteCartItemDoc,
-  validator("param", z.object({ id: z.uuid() }), validationHook),
+  validator("param", UuidParamSchema, validationHook),
   async (c) => {
     const user = c.get("user");
     const { id } = c.req.valid("param");
@@ -387,38 +282,7 @@ cart.delete(
         );
       }
 
-      // Calculate totals
-      let totalItems = 0;
-      let totalAmount = 0;
-
-      const cartItemsWithSubtotals = updatedCart.cartItems.map((item) => {
-        const subAmount = (
-          parseFloat(item.product.price) * item.quantity
-        ).toFixed(2);
-        totalItems += item.quantity;
-        totalAmount += parseFloat(subAmount);
-
-        return {
-          id: item.id,
-          cartId: item.cartId,
-          productId: item.productId,
-          quantity: item.quantity,
-          subAmount,
-          product: item.product,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-        };
-      });
-
-      const cartResponse = {
-        id: updatedCart.id,
-        userId: updatedCart.userId,
-        cartItems: cartItemsWithSubtotals,
-        totalItems,
-        totalAmount: totalAmount.toFixed(2),
-        createdAt: updatedCart.createdAt,
-        updatedAt: updatedCart.updatedAt,
-      };
+      const cartResponse = buildCartResponse(updatedCart);
 
       return c.json(
         successResponse(cartResponse, "Cart item removed successfully"),

@@ -1,5 +1,3 @@
-import type { z } from "zod";
-
 /**
  * Helper function to create a success response for API routes.
  * @param data - The data to include in the response.
@@ -26,6 +24,25 @@ export const successResponse = <TData, TDetails extends string>(
 };
 
 /**
+ * Build the pagination object used by `successResponse`. Returns `undefined`
+ * when `limit` is not set (unpaginated requests), so callers can pass the
+ * result directly to `successResponse(data, msg, pagination)`.
+ */
+export const buildPagination = (
+  page: number | undefined,
+  limit: number | undefined,
+  total: number,
+) => {
+  if (!limit) return undefined;
+  return {
+    page: page ?? 1,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit),
+  };
+};
+
+/**
  * Helper function to create an error response for API routes.
  * @param code - The error code.
  * @param details - Additional details about the error.
@@ -45,40 +62,6 @@ export const errorResponse = (
       fields: fields ?? {},
     },
   };
-};
-
-/**
- * Helper function to parse a JSON field from a string value.
- * @param value - The string value to parse.
- * @param schema - The Zod schema to validate the parsed value against.
- * @param fieldName - The name of the field being parsed.
- * @returns An object representing the success or failure of the parsing.
- */
-export const parseJsonField = <T>(
-  value: string | undefined,
-  schema: z.ZodSchema<T>,
-  fieldName: string,
-): { success: true; data: T } | { success: false; error: string } => {
-  if (!value) {
-    return { success: true, data: [] as T };
-  }
-
-  try {
-    const parsed = JSON.parse(value);
-    const result = schema.safeParse(parsed);
-
-    if (!result.success) {
-      const firstError = result.error.issues[0];
-      return {
-        success: false,
-        error: `${firstError.path.join(".")} - ${firstError.message}`,
-      };
-    }
-
-    return { success: true, data: result.data };
-  } catch {
-    return { success: false, error: `${fieldName} must be valid JSON` };
-  }
 };
 
 /**
