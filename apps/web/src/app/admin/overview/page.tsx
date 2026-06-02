@@ -3,9 +3,9 @@ import {
   HydrationBoundary,
   QueryClient,
 } from "@tanstack/react-query";
-import { headers } from "next/headers";
 
 import { getAdminMonthlyStats, getAdminStats } from "@/features/admin/queries";
+import { getCookie } from "@/lib/auth";
 import { queryKeys } from "@/lib/query-keys";
 
 import { OverviewCharts } from "./overview-charts";
@@ -14,7 +14,7 @@ import { OverviewStats } from "./overview-stats";
 const AdminOverviewPage = async () => {
   const queryClient = new QueryClient();
 
-  const cookie = (await headers()).get("cookie") ?? undefined;
+  const cookie = await getCookie();
 
   await Promise.all([
     queryClient.prefetchQuery({

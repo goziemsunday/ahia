@@ -1,20 +1,27 @@
-type UsePaginationProps = {
+type ComputePaginationProps = {
   currentPage: number;
   totalPages: number;
   paginationItemsToDisplay: number;
 };
 
-type UsePaginationReturn = {
+type ComputePaginationReturn = {
   pages: number[];
   showLeftEllipsis: boolean;
   showRightEllipsis: boolean;
 };
 
-export const usePagination = ({
+/**
+ * Compute the visible page numbers for a pagination component. This
+ * function calculates which page numbers to show and whether to display
+ * left/right ellipsis indicators.
+ *
+ * @returns An object containing the visible page numbers and ellipsis flags.
+ */
+export const computePagination = ({
   currentPage,
   totalPages,
   paginationItemsToDisplay,
-}: UsePaginationProps): UsePaginationReturn => {
+}: ComputePaginationProps): ComputePaginationReturn => {
   if (totalPages <= paginationItemsToDisplay) {
     return {
       pages: Array.from({ length: totalPages }, (_, i) => i + 1),

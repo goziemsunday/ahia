@@ -3,7 +3,6 @@ import {
   HydrationBoundary,
   QueryClient,
 } from "@tanstack/react-query";
-import { headers } from "next/headers";
 import { ReactNode, Suspense } from "react";
 
 import { SiteFooter } from "@/components/storefront/site-footer";
@@ -15,6 +14,7 @@ import {
   getTopCategories,
   getTrendingProducts,
 } from "@/features/storefront/queries";
+import { getCookie } from "@/lib/auth";
 import { queryKeys } from "@/lib/query-keys";
 
 const StorefrontDataProvider = async ({
@@ -23,7 +23,7 @@ const StorefrontDataProvider = async ({
   children: ReactNode;
 }) => {
   const queryClient = new QueryClient();
-  const cookie = (await headers()).get("cookie") ?? undefined;
+  const cookie = await getCookie();
 
   await Promise.all([
     queryClient.prefetchQuery({

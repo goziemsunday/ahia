@@ -1,11 +1,11 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { ReactNode, Suspense } from "react";
 
 import { getUser } from "@/features/user/queries";
+import { getCookie } from "@/lib/auth";
 
 const AuthGuard = async ({ children }: { children: ReactNode }) => {
-  const user = await getUser((await headers()).get("cookie") ?? undefined);
+  const user = await getUser(await getCookie());
 
   if (user) {
     redirect("/");

@@ -3,7 +3,6 @@ import {
   HydrationBoundary,
   QueryClient,
 } from "@tanstack/react-query";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { ReactNode, Suspense } from "react";
 
@@ -24,11 +23,12 @@ import {
   getAdminUsers,
 } from "@/features/admin/queries";
 import { getUser } from "@/features/user/queries";
+import { getCookie } from "@/lib/auth";
 import { queryKeys } from "@/lib/query-keys";
 
 const AdminAuthWrapper = async ({ children }: { children: ReactNode }) => {
   const queryClient = new QueryClient();
-  const cookie = (await headers()).get("cookie") ?? undefined;
+  const cookie = await getCookie();
 
   const user = await queryClient.fetchQuery({
     queryKey: queryKeys.user(),

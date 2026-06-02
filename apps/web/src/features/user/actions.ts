@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { z } from "zod";
 
 import {
@@ -8,17 +7,14 @@ import {
   UserUpdateSchema,
 } from "@repo/db/validators/user.validator";
 
+import { getAuthHeaders } from "@/lib/auth";
 import { $fetchAndThrow } from "@/lib/fetch";
 import { successResSchema } from "@/lib/schemas";
 
 export const updateUser = async (body: z.infer<typeof UserUpdateSchema>) => {
-  const headersList = await headers();
-
   const { data: response } = await $fetchAndThrow("/user/me", {
     method: "PATCH",
-    headers: {
-      cookie: headersList.get("cookie") ?? "",
-    },
+    headers: await getAuthHeaders(),
     body,
     output: successResSchema(
       z.object({
@@ -33,13 +29,9 @@ export const updateUser = async (body: z.infer<typeof UserUpdateSchema>) => {
 export const changePassword = async (
   body: z.infer<typeof ChangePasswordSchema>,
 ) => {
-  const headersList = await headers();
-
   const { data: response } = await $fetchAndThrow("/user/me/password", {
     method: "POST",
-    headers: {
-      cookie: headersList.get("cookie") ?? "",
-    },
+    headers: await getAuthHeaders(),
     body,
     output: successResSchema(
       z.object({

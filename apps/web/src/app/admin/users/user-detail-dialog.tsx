@@ -3,12 +3,10 @@
 import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { format } from "date-fns";
-import { Facehash } from "facehash";
 import { useState } from "react";
 
 import type { User } from "@repo/db/schemas/auth.schema";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,8 +17,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import type { AdminUserRow } from "@/features/admin/queries";
-import { getInitials, roles, truncateId } from "@/lib/utils";
+import { roles, truncateId } from "@/lib/utils";
 
 import { UserRowActions } from "./user-row-actions";
 
@@ -60,27 +59,10 @@ export function UserDetailDialog({
         <div className="flex items-start gap-4">
           {/* Avatar */}
           <div className="shrink-0">
-            {!user.image ? (
-              <Facehash
-                name={user.name}
-                size={64}
-                variant="solid"
-                intensity3d="medium"
-                enableBlink
-                className="rounded-xl border bg-muted text-muted-foreground"
-              />
-            ) : (
-              <Avatar className="size-16 rounded-xl after:rounded-xl">
-                <AvatarImage
-                  src={user.image}
-                  alt={user.name}
-                  className="rounded-xl"
-                />
-                <AvatarFallback className="rounded-xl text-lg font-semibold">
-                  {getInitials(user.name)}
-                </AvatarFallback>
-              </Avatar>
-            )}
+            <UserAvatar
+              user={user}
+              className="size-16 rounded-xl border bg-muted text-muted-foreground"
+            />
           </div>
 
           {/* Name + badges */}

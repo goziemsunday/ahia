@@ -4,13 +4,11 @@ import { ViewIcon, ViewOffIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Facehash } from "facehash";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -20,10 +18,11 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { cancelToastEl } from "@/components/ui/sonner";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { changePassword, updateUser } from "@/features/user/actions";
 import { getUser } from "@/features/user/queries";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiError, getInitials } from "@/lib/utils";
+import { getApiError } from "@/lib/utils";
 
 import {
   InputGroup,
@@ -163,29 +162,11 @@ export const UserSettings = () => {
         >
           {/* Avatar */}
           <div className="flex items-center gap-5">
-            {!user.image ? (
-              <Facehash
-                name={user.name}
-                size={48}
-                variant="solid"
-                intensity3d="medium"
-                enableBlink
-                className="rounded-xl border bg-muted text-muted-foreground"
-              />
-            ) : (
-              <Avatar size="xl" className={"rounded-xl after:rounded-xl"}>
-                {user.image && (
-                  <AvatarImage
-                    src={user.image}
-                    alt={user.name}
-                    className={"rounded-xl"}
-                  />
-                )}
-                <AvatarFallback className="rounded-xl text-[10px] font-semibold">
-                  {getInitials(user.name)}
-                </AvatarFallback>
-              </Avatar>
-            )}
+            <UserAvatar
+              user={user}
+              size="xl"
+              className="rounded-xl border bg-muted text-muted-foreground"
+            />
           </div>
 
           <FieldGroup>

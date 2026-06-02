@@ -4,13 +4,13 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import type { Route } from "next";
-import { headers } from "next/headers";
 import Link from "next/link";
 import { Suspense } from "react";
 
 import { Search } from "@/components/storefront/search";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getUser } from "@/features/user/queries";
+import { getCookie } from "@/lib/auth";
 import { queryKeys } from "@/lib/query-keys";
 
 import { CartDrawer } from "./cart-drawer";
@@ -74,7 +74,7 @@ const MobileNavUserAsync = async () => {
 
   await queryClient.prefetchQuery({
     queryKey: queryKeys.user(),
-    queryFn: async () => getUser((await headers()).get("cookie") ?? undefined),
+    queryFn: async () => getUser(await getCookie()),
   });
 
   return (
@@ -89,7 +89,7 @@ const HeaderActions = async () => {
 
   await queryClient.prefetchQuery({
     queryKey: queryKeys.user(),
-    queryFn: async () => getUser((await headers()).get("cookie") ?? undefined),
+    queryFn: async () => getUser(await getCookie()),
   });
 
   return (

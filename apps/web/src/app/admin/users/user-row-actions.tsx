@@ -8,7 +8,6 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
-import { Facehash } from "facehash";
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -25,7 +24,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -57,10 +55,11 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { cancelToastEl } from "@/components/ui/sonner";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import type { AdminUserRow } from "@/features/admin/queries";
 import { authClient } from "@/lib/auth-client";
 import { queryKeys } from "@/lib/query-keys";
-import { getInitials, roles } from "@/lib/utils";
+import { roles } from "@/lib/utils";
 
 interface UserRowActionsProps {
   user: AdminUserRow;
@@ -809,29 +808,11 @@ export function UserRowActions({ user, currentUser }: UserRowActionsProps) {
             >
               {/* Avatar */}
               <div className="flex items-center gap-5">
-                {!user.image ? (
-                  <Facehash
-                    name={user.name}
-                    size={48}
-                    variant="solid"
-                    intensity3d="medium"
-                    enableBlink
-                    className="rounded-xl border bg-muted text-muted-foreground"
-                  />
-                ) : (
-                  <Avatar size="xl" className={"rounded-xl after:rounded-xl"}>
-                    {user.image && (
-                      <AvatarImage
-                        src={user.image}
-                        alt={user.name}
-                        className={"rounded-xl"}
-                      />
-                    )}
-                    <AvatarFallback className="rounded-xl text-[10px] font-semibold">
-                      {getInitials(user.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                )}
+                <UserAvatar
+                  user={user}
+                  size="xl"
+                  className="rounded-xl border bg-muted text-muted-foreground"
+                />
               </div>
 
               <FieldGroup>

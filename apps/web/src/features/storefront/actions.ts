@@ -1,9 +1,8 @@
 "use server";
 
-import { headers } from "next/headers";
-
 import { CartSelectSchema } from "@repo/db/validators/cart.validator";
 
+import { getAuthHeaders } from "@/lib/auth";
 import { $fetchAndThrow } from "@/lib/fetch";
 import { successResSchema } from "@/lib/schemas";
 
@@ -16,13 +15,9 @@ export const addToCart = async ({
   productId: string;
   quantity: number;
 }) => {
-  const headersList = await headers();
-
   return await $fetchAndThrow("/cart/items", {
     method: "POST",
-    headers: {
-      cookie: headersList.get("cookie") ?? "",
-    },
+    headers: await getAuthHeaders(),
     body: { productId, quantity },
     output: successResSchema(CartSelectSchema),
   });

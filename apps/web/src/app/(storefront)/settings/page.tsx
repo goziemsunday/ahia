@@ -4,13 +4,13 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { UserSettings } from "@/components/storefront/user-settings";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getUser } from "@/features/user/queries";
+import { getCookie } from "@/lib/auth";
 import { queryKeys } from "@/lib/query-keys";
 
 export const metadata: Metadata = {
@@ -41,12 +41,12 @@ const SettingsPage = () => {
 };
 
 const SettingsContent = async () => {
-  const headersList = await headers();
   const queryClient = new QueryClient();
+  const cookie = await getCookie();
 
   const user = await queryClient.fetchQuery({
     queryKey: queryKeys.user(),
-    queryFn: async () => getUser(headersList.get("cookie") ?? undefined),
+    queryFn: async () => getUser(cookie),
   });
 
   if (!user) {

@@ -61,7 +61,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { usePagination } from "@/hooks/use-pagination";
+import { computePagination } from "@/lib/compute-pagination";
 import { cn } from "@/lib/utils";
 
 // Filter configuration types
@@ -257,7 +257,7 @@ export const DataTable = <TData, TValue>({
     (f) => f.type === "multi-dropdown",
   );
 
-  const { pages, showLeftEllipsis, showRightEllipsis } = usePagination({
+  const { pages, showLeftEllipsis, showRightEllipsis } = computePagination({
     currentPage:
       (isServerSide
         ? (controlledPagination ?? defaultPagination)

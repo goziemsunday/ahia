@@ -13,7 +13,6 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Facehash } from "facehash";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
@@ -30,12 +29,12 @@ import {
   DrawerTrigger,
 } from "@/components/ui/drawer";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { getUser } from "@/features/user/queries";
 import { authClient } from "@/lib/auth-client";
 import { queryKeys } from "@/lib/query-keys";
-import { cn, getInitials, roles, truncateEmail } from "@/lib/utils";
+import { cn, roles, truncateEmail } from "@/lib/utils";
 
-import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { cancelToastEl } from "../ui/sonner";
 
 const NAV_LINKS = [
@@ -146,32 +145,11 @@ export const MobileNavUserContent = () => {
     return (
       <div className="flex flex-col gap-0.5">
         <div className="flex items-center gap-3 px-3 py-3">
-          {!user.image ? (
-            <Facehash
-              name={user.name}
-              size={40}
-              variant="solid"
-              intensity3d="medium"
-              enableBlink
-              className="shrink-0 rounded-xl border bg-muted text-muted-foreground"
-            />
-          ) : (
-            <Avatar
-              size="lg"
-              className={"shrink-0 rounded-xl after:rounded-xl"}
-            >
-              {user.image && (
-                <AvatarImage
-                  src={user.image}
-                  alt={user.name}
-                  className={"rounded-xl"}
-                />
-              )}
-              <AvatarFallback className="rounded-xl text-[10px] font-semibold">
-                {getInitials(user.name)}
-              </AvatarFallback>
-            </Avatar>
-          )}
+          <UserAvatar
+            user={user}
+            size="lg"
+            className="shrink-0 rounded-xl border bg-muted text-muted-foreground"
+          />
           <div className="grid flex-1 text-left text-sm leading-tight">
             <span className="truncate text-sm font-medium text-foreground">
               {user.name}

@@ -1,13 +1,12 @@
 "use server";
 
-import { headers } from "next/headers";
-
 import {
   CategorySelectSchema,
   ProductExtendedSchema,
 } from "@repo/db/validators/product.validator";
 import { UserSelectSchema } from "@repo/db/validators/user.validator";
 
+import { getAuthHeaders } from "@/lib/auth";
 import { $fetchAndThrow } from "@/lib/fetch";
 import { successResSchema } from "@/lib/schemas";
 
@@ -18,13 +17,9 @@ export const createAdminUser = async (body: {
   email: string;
   role: "user" | "admin";
 }) => {
-  const headersList = await headers();
-
   const { data } = await $fetchAndThrow("/admin/users", {
     method: "POST",
-    headers: {
-      cookie: headersList.get("cookie") ?? "",
-    },
+    headers: await getAuthHeaders(),
     body,
     output: successResSchema(UserSelectSchema),
   });
@@ -35,13 +30,9 @@ export const createAdminUser = async (body: {
 // ── Categories ──────────────────────────────────────────────────
 
 export const createCategory = async (body: { name: string }) => {
-  const headersList = await headers();
-
   const { data } = await $fetchAndThrow("/categories", {
     method: "POST",
-    headers: {
-      cookie: headersList.get("cookie") ?? "",
-    },
+    headers: await getAuthHeaders(),
     body,
     output: successResSchema(CategorySelectSchema),
   });
@@ -56,13 +47,9 @@ export const updateCategory = async ({
   id: string;
   body: { name: string };
 }) => {
-  const headersList = await headers();
-
   const { data } = await $fetchAndThrow(`/categories/${id}`, {
     method: "PUT",
-    headers: {
-      cookie: headersList.get("cookie") ?? "",
-    },
+    headers: await getAuthHeaders(),
     body,
     output: successResSchema(CategorySelectSchema),
   });
@@ -71,13 +58,9 @@ export const updateCategory = async ({
 };
 
 export const deleteCategory = async (id: string) => {
-  const headersList = await headers();
-
   const { data } = await $fetchAndThrow(`/categories/${id}`, {
     method: "DELETE",
-    headers: {
-      cookie: headersList.get("cookie") ?? "",
-    },
+    headers: await getAuthHeaders(),
     output: successResSchema(CategorySelectSchema),
   });
 
@@ -114,13 +97,9 @@ export const createAdminProduct = async (input: CreateAdminProductInput) => {
     formData.append("images", image);
   }
 
-  const headersList = await headers();
-
   const { data } = await $fetchAndThrow("/products", {
     method: "POST",
-    headers: {
-      cookie: headersList.get("cookie") ?? "",
-    },
+    headers: await getAuthHeaders(),
     body: formData,
     output: successResSchema(ProductExtendedSchema),
   });
@@ -172,13 +151,9 @@ export const updateAdminProduct = async ({
     }
   }
 
-  const headersList = await headers();
-
   const { data } = await $fetchAndThrow(`/products/${id}`, {
     method: "PUT",
-    headers: {
-      cookie: headersList.get("cookie") ?? "",
-    },
+    headers: await getAuthHeaders(),
     body: formData,
     output: successResSchema(ProductExtendedSchema),
   });
@@ -187,13 +162,9 @@ export const updateAdminProduct = async ({
 };
 
 export const deleteProduct = async (id: string) => {
-  const headersList = await headers();
-
   const { data } = await $fetchAndThrow(`/products/${id}`, {
     method: "DELETE",
-    headers: {
-      cookie: headersList.get("cookie") ?? "",
-    },
+    headers: await getAuthHeaders(),
     output: successResSchema(ProductExtendedSchema),
   });
 
