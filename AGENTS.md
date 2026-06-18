@@ -20,7 +20,10 @@ bun lint --deny-warnings      # CI lint — must pass with zero warnings
 bun fmt:check                 # CI format check (oxfmt)
 bun lint                      # lint without deny
 bun lint:fix                  # auto-fix lint issues
+bun lint:type                 # type-aware linting (oxlint --type-aware)
 bun fmt                       # auto-format (oxfmt)
+turbo run check-types         # type-check all packages
+turbo run start               # production start (API + Web)
 ```
 
 Single package verification:
@@ -28,7 +31,7 @@ Single package verification:
 ```bash
 turbo run build --filter=@repo/api
 turbo run build --filter=@repo/web
-turbo run check-types
+turbo run check-types --filter=@repo/api
 ```
 
 Stripe webhook forwarding (for local dev):
@@ -76,15 +79,16 @@ Two workflows in `.github/workflows/`:
 - DB schema casing: `snake_case` (Drizzle configured with `casing: "snake_case"`)
 - Env validation: `@t3-oss/env` (core for API/DB, nextjs adapter for web). Missing env fails at startup.
 - API builds to standalone binary via `bun build --compile`
-- Web enables React Compiler (`reactCompiler: true`) and `cacheComponents: true`
+- Web enables React Compiler (`reactCompiler: true`) and `cacheComponents: true`, Tailwind v4 via `@tailwindcss/postcss`
 - shadcn base-nova style, hugeicons icon library
 - Releases: semantic-release on `main` and `beta` (prerelease) branches
 
 ## Architecture notes
 
-- API routes: `/api/user`, `/api/admin`, `/api/categories`, `/api/products`, `/api/orders`, `/api/cart`, `/api/health`
-- Stripe webhooks are routed to a separate bare Hono app (no middleware) to preserve raw request body for signature verification
+- API routes: `/api/{health,user,admin,categories,products,orders,cart}`, `/api/auth/*` (Better Auth), `/api/webhooks/stripe` (bare Hono, no middleware), API docs at `/api/reference` (Scalar)
+- Stripe webhooks routed to a separate bare Hono app (no middleware) to preserve raw request body for signature verification
 - Superadmin auto-created on API startup (skipped in test env)
-- Better Auth session cookie: `ahia_auth_session`, httpOnly, 30-day expiry
 - Auth roles defined in `packages/permissions`: `user`, `admin`, `superadmin`
 - Web app uses `nuqs` for URL query state, `@tanstack/react-query` for server state
+- `packages/db` exposes multiple export paths: `.`, `./schemas/*`, `./validators/*`
+- Docker image entrypoint runs `./migrate-exe && ./api-exe` — migrations before API start
