@@ -1,0 +1,37 @@
+{
+  "name": "@repo/nest",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "debug": "nest start --debug --watch",
+    "dev": "nest start --watch",
+    "start": "nest start",
+    "start:prod": "bun run dist/main"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/platform-express": "^11.0.1",
+    "@t3-oss/env-core": "^0.13.11",
+    "better-auth": "^1.6.19",
+    "reflect-metadata": "^0.2.2",
+    "resend": "^6.14.0",
+    "rxjs": "^7.8.1",
+    "slugify": "^1.6.9",
+    "stripe": "^22.2.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@repo/db": "workspace:*",
+    "@repo/permissions": "workspace:*",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "source-map-support": "^0.5.21",
+    "ts-loader": "^9.5.2",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^6.0.3"
+  }
+}

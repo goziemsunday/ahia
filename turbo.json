@@ -1,6 +1,7 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
+  "cacheMaxAge": "2w",
   "globalDependencies": [".env"],
   "globalEnv": [
     "API_URL",
