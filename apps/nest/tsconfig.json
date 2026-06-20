@@ -2,11 +2,10 @@
   "compilerOptions": {
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "resolvePackageJsonExports": true,
     "esModuleInterop": true,
     "resolvePackageJsonExports": true,
     "isolatedModules": true,
-    "declaration": true,
+    "declaration": false,
     "removeComments": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
@@ -15,13 +14,13 @@
     "sourceMap": true,
     "rootDir": "./src",
     "outDir": "./dist",
-    "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": true,
     "forceConsistentCasingInFileNames": true,
     "noImplicitAny": true,
     "strictBindCallApply": true,
     "noFallthroughCasesInSwitch": true,
+    "incremental": false,
     "types": ["node"]
   }
 }
