@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "clean": "rm -rf dist .tsbuildinfo && find src -name '*.js' -o -name '*.js.map' | xargs rm -f",
     "debug": "nest start --debug --watch",
     "dev": "nest start --watch",
     "start": "nest start",
@@ -13,7 +14,9 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
     "@t3-oss/env-core": "^0.13.11",
+    "@thallesp/nestjs-better-auth": "^2.6.1",
     "better-auth": "^1.6.19",
+    "dotenv": "^17.4.2",
     "reflect-metadata": "^0.2.2",
     "resend": "^6.14.0",
     "rxjs": "^7.8.1",
