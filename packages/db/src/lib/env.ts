@@ -1,12 +1,5 @@
-import { createEnv } from "@t3-oss/env-core";
-import { z } from "zod";
-
-const env = createEnv({
-  server: {
-    DATABASE_URL: z.url(),
-  },
-  runtimeEnv: process.env,
-  emptyStringAsUndefined: true,
-});
+const env = {
+  DATABASE_URL: process.env.DATABASE_URL,
+};
 
 export default env;

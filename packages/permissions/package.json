@@ -1,9 +1,14 @@
 {
   "name": "@repo/permissions",
   "private": true,
-  "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "bunx tsc"
   },
   "dependencies": {
     "better-auth": "^1.6.2"

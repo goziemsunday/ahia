@@ -46,6 +46,11 @@
       "cache": false,
       "persistent": true
     },
+    "@repo/nest#dev": {
+      "dependsOn": ["@repo/db#build", "@repo/permissions#build"],
+      "cache": false,
+      "persistent": true
+    },
     "start": {
       "dependsOn": ["^build"],
       "cache": false,

@@ -1,4 +1,7 @@
-import { createAccessControl } from "better-auth/plugins/access";
+import {
+  createAccessControl,
+  type AccessControl,
+} from "better-auth/plugins/access";
 import { adminAc, defaultStatements } from "better-auth/plugins/admin/access";
 
 const statement = {
@@ -8,7 +11,7 @@ const statement = {
   order: ["view-user", "view-all"],
 } as const;
 
-export const ac = createAccessControl(statement);
+export const ac = createAccessControl(statement) as AccessControl;
 
 export const user = ac.newRole({
   product: ["view"],
