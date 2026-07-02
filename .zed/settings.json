@@ -159,6 +159,12 @@
       ]
     },
     "TypeScript": {
+      "language_servers": [
+        "tsgo",
+        "!vtsls",
+        "!typescript-language-server",
+        "..."
+      ],
       "format_on_save": "on",
       "prettier": {
         "allowed": false
@@ -172,6 +178,12 @@
       ]
     },
     "TSX": {
+      "language_servers": [
+        "tsgo",
+        "!vtsls",
+        "!typescript-language-server",
+        "..."
+      ],
       "format_on_save": "on",
       "prettier": {
         "allowed": false
