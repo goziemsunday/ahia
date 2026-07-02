@@ -17,10 +17,7 @@ export const getUser = async (cookie?: string) => {
     if (error instanceof BetterFetchError) {
       const parsed = errorResSchema.safeParse(error.error);
 
-      if (
-        error.status === 401 ||
-        (parsed.success && parsed.data.error.code === "UNAUTHORIZED")
-      ) {
+      if (error.status === 401) {
         return null;
       }
 
