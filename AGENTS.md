@@ -5,6 +5,7 @@
 Full-stack e-commerce monorepo: Turborepo + Bun workspaces.
 
 - `apps/api` (`@repo/api`) — Hono on Bun, port 8000
+- `apps/nest` (`@repo/nest`) — NestJS 11, port 5000
 - `apps/web` (`@repo/web`) — Next.js 16 / React 19, port 3000
 - `packages/db` (`@repo/db`) — Drizzle ORM + PostgreSQL
 - `packages/permissions` (`@repo/permissions`) — Better Auth RBAC roles
@@ -14,7 +15,7 @@ Full-stack e-commerce monorepo: Turborepo + Bun workspaces.
 ```bash
 bun install                   # install deps (linker = "isolated" in bunfig.toml)
 turbo run db:up               # start PostgreSQL via Docker on port 5434 (NOT 5432)
-turbo run dev                 # start API + Web concurrently
+turbo run dev                 # start all services (DB auto-started via dependsOn)
 turbo run build               # production build (API compiles to standalone binary)
 bun lint --deny-warnings      # CI lint — must pass with zero warnings
 bun fmt:check                 # CI format check (oxfmt)
@@ -30,6 +31,7 @@ Single package verification:
 
 ```bash
 turbo run build --filter=@repo/api
+turbo run build --filter=@repo/nest
 turbo run build --filter=@repo/web
 turbo run check-types --filter=@repo/api
 ```
@@ -48,6 +50,8 @@ turbo run db:migrate    # run pending migrations
 turbo run db:push       # push schema directly (no migration file)
 turbo run db:studio     # Drizzle Studio UI
 turbo run db:psql       # psql shell into the running container
+turbo run db:down       # stop DB container
+turbo run db:delete     # stop DB container + delete volumes
 ```
 
 ## Setup
@@ -92,3 +96,4 @@ Two workflows in `.github/workflows/`:
 - Web app uses `nuqs` for URL query state, `@tanstack/react-query` for server state
 - `packages/db` exposes multiple export paths: `.`, `./schemas/*`, `./validators/*`
 - Docker image entrypoint runs `./migrate-exe && ./api-exe` — migrations before API start
+- `apps/nest` (NestJS) shares the same Better Auth config and database as `apps/api`, on port 5000
