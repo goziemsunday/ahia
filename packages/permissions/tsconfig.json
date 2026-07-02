@@ -3,7 +3,7 @@
     "lib": ["ESNext"],
     "target": "ES2023",
     "module": "commonjs",
-    "moduleResolution": "node",
+    // "moduleResolution": "node",
     "rootDir": "./src",
     "outDir": "./dist",
     "declaration": true,

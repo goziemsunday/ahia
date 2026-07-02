@@ -2,7 +2,6 @@ import { NestFactory } from "@nestjs/core";
 import "dotenv/config";
 
 import { AppModule } from "./app.module";
-import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import env from "./lib/env";
 
 async function bootstrap() {
@@ -13,12 +12,9 @@ async function bootstrap() {
   const corsOrigins = env.CORS_ORIGINS
     ? env.CORS_ORIGINS.split(",").map((origin) => origin.trim())
     : env.WEB_URL;
-  app.enableCors({
-    origin: corsOrigins,
-    credentials: true,
-  });
 
-  app.useGlobalFilters(new HttpExceptionFilter());
+  app.setGlobalPrefix("api");
+  app.enableCors({ origin: corsOrigins, credentials: true });
 
   await app.listen(5000);
 }
