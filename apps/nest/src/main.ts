@@ -2,6 +2,7 @@ import { NestFactory } from "@nestjs/core";
 import "dotenv/config";
 
 import { AppModule } from "./app.module";
+import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import env from "./lib/env";
 
 async function bootstrap() {
@@ -17,6 +18,8 @@ async function bootstrap() {
     credentials: true,
   });
 
+  app.useGlobalFilters(new HttpExceptionFilter());
+
   await app.listen(5000);
 }
-bootstrap();
+void bootstrap();
