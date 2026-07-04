@@ -18,6 +18,7 @@
   },
   "rules": {
     "typescript/no-unsafe-type-assertion": "off",
+    "typescript/no-extraneous-class": "allow",
 
     "eslint/no-shadow": "off",
 
