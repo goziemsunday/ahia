@@ -9,5 +9,7 @@ export type SuccessRes<TData> = {
 };
 
 export type ErrorRes = {
-  error: string;
+  error: {
+    details: string;
+  };
 };

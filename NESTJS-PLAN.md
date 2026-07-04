@@ -1,4 +1,6 @@
-# NestJS Migration — Phase 1: Core Infrastructure
+# NestJS Migration
+
+# Phase 1: Core Infrastructure
 
 ## Goal
 
@@ -57,6 +59,7 @@ export type ErrorRes = {
 Catches all exceptions and returns `{ error: { details: "..." } }` with the matching HTTP status code. Registered in `AppModule` via `APP_FILTER` provider.
 
 Handles:
+
 - `ZodValidationException` → 400 with per-field error messages from Zod issues
 - `ZodSerializationException` → 500 (logs the error, hides details in prod)
 - `HttpException` (and subclasses: `NotFoundException`, `BadRequestException`, `UnauthorizedException`, `ForbiddenException`, `ConflictException`, etc.) → maps to respective status code
@@ -218,25 +221,127 @@ apps/nest/src/
 
 ---
 
-## Pattern for Phase 2+ modules
+# Phase 2: User Module
+
+## Goal
+
+Port the three user routes (`GET /me`, `PATCH /me`, `POST /me/password`) from the Hono API to NestJS. All are thin wrappers around Better Auth's built-in methods — no custom services or direct DB queries needed.
+
+## 2.1 — New files
+
+```
+apps/nest/src/user/
+├── user.controller.ts
+├── user.module.ts
+└── user.dto.ts
+```
+
+## 2.2 — `user.dto.ts`
 
 ```ts
-@Controller("categories")
-export class CategoriesController {
-  @Get()
-  async findAll(@Query(PaginationQuerySchema) query: PaginationQuery) {
-    const { categories, total } = await getCategories(query);
-    return successResponse(
-      categories,
-      buildPagination(query.page, query.limit, total),
-    );
+import { createZodDto } from "nestjs-zod";
+import {
+  UserUpdateSchema,
+  ChangePasswordSchema,
+} from "@repo/db/validators/user.validator";
+
+export class UpdateUserDto extends createZodDto(UserUpdateSchema) {}
+export class ChangePasswordDto extends createZodDto(ChangePasswordSchema) {}
+```
+
+DTO classes give us OpenAPI compatibility and `strictSchemaDeclaration` support — the idiomatic nestjs-zod pattern.
+
+## 2.3 — `user.controller.ts`
+
+| Method  | Path          | DTO                 | Implementation                                                                |
+| ------- | ------------- | ------------------- | ----------------------------------------------------------------------------- |
+| `GET`   | `me`          | —                   | `@Session()` → `successResponse(session.user)`                                |
+| `PATCH` | `me`          | `UpdateUserDto`     | `authService.api.updateUser({ body, headers: fromNodeHeaders(req.headers) })` |
+| `POST`  | `me/password` | `ChangePasswordDto` | `authService.api.changePassword({ body, headers: /* Bearer */ })`             |
+
+```ts
+import { Controller, Get, Patch, Post, Body, Req } from "@nestjs/common";
+import { AuthService, Session } from "@thallesp/nestjs-better-auth";
+import type { UserSession } from "@thallesp/nestjs-better-auth";
+import { fromNodeHeaders } from "better-auth/node";
+
+import { auth } from "@/lib/auth";
+import { successResponse } from "@/lib/utils";
+import { UpdateUserDto, ChangePasswordDto } from "./user.dto";
+
+@Controller("user")
+export class UserController {
+  constructor(private readonly authService: AuthService) {}
+
+  @Get("me")
+  getMe(@Session() session: UserSession<typeof auth>) {
+    return successResponse(session.user);
   }
 
-  @Post()
-  async create(@Body(CreateCategorySchema) body: CreateCategory) {
-    return successResponse(await createCategory(body.name));
+  @Patch("me")
+  async updateMe(@Body() body: UpdateUserDto, @Req() req: Request) {
+    const user = await this.authService.api.updateUser({
+      body,
+      headers: fromNodeHeaders(req.headers),
+    });
+    return successResponse(user);
+  }
+
+  @Post("me/password")
+  async changePassword(
+    @Body() body: ChangePasswordDto,
+    @Session() session: UserSession<typeof auth>,
+  ) {
+    await this.authService.api.changePassword({
+      body: {
+        currentPassword: body.currentPassword,
+        newPassword: body.newPassword,
+        revokeOtherSessions: body.revokeOtherSessions,
+      },
+      headers: new Headers({
+        Authorization: `Bearer ${session.session.token}`,
+      }),
+    });
+    return successResponse({ status: true });
   }
 }
 ```
 
-Auth is handled at the module level — the `AuthModule.forRoot()` import protects all routes by default. Public routes are annotated with `@AllowAnonymous()`.
+> **`PATCH /me`** passes raw request headers so Better Auth finds the session cookie.
+> **`POST /me/password`** uses `session.session.token` as a Bearer token (matches the Hono implementation).
+
+## 2.4 — `user.module.ts`
+
+```ts
+import { Module } from "@nestjs/common";
+import { UserController } from "./user.controller";
+
+@Module({ controllers: [UserController] })
+export class UserModule {}
+```
+
+## 2.5 — Register in `AppModule`
+
+```diff
+ imports: [
+   HealthModule,
++  UserModule,
+   AuthModule.forRoot({ auth, bodyParser: { rawBody: true } }),
+ ],
+```
+
+## 2.6 — No frontend changes needed
+
+The web app already sends `credentials: "include"` and parses `{ data }` via `successResSchema()`. No response shape change required.
+
+## 2.7 — No body parser changes
+
+`AuthModule.forRoot({ bodyParser })` already re-adds JSON parsing for non-auth routes — the library handles it.
+
+## 2.8 — Error handling
+
+Everything is catch-all via the global `HttpExceptionFilter`:
+
+- `ZodValidationException` → 400 with per-field issues
+- `APIError` from Better Auth → `UnauthorizedException`, `BadRequestException`, etc. → proper HTTP status
+- No try/catch needed in controller

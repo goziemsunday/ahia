@@ -6,6 +6,7 @@ import { ZodSerializerInterceptor, ZodValidationPipe } from "nestjs-zod";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { HealthModule } from "./health/health.module";
 import { auth } from "./lib/auth";
+import { UserModule } from "./user/user.module";
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { auth } from "./lib/auth";
       auth,
       bodyParser: { rawBody: true },
     }),
+    UserModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },
