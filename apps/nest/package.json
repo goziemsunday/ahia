@@ -3,10 +3,9 @@
   "private": true,
   "scripts": {
     "build": "nest build",
-    "clean": "rm -rf dist .tsbuildinfo && find src -name '*.js' -o -name '*.js.map' | xargs rm -f",
-    "debug": "nest start --debug --watch",
-    "dev": "nest start --watch",
-    "start": "nest start",
+    "debug": "nest start --debug --watch --exec bun",
+    "dev": "nest start --watch --exec bun",
+    "start": "nest start --exec bun",
     "start:prod": "bun run dist/main"
   },
   "dependencies": {
