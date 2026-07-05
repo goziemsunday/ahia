@@ -3,6 +3,7 @@ import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
 import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { ZodSerializerInterceptor, ZodValidationPipe } from "nestjs-zod";
 
+import { CategoriesModule } from "./category/categories.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { HealthModule } from "./health/health.module";
 import { auth } from "./lib/auth";
@@ -16,6 +17,7 @@ import { UserModule } from "./user/user.module";
       bodyParser: { rawBody: true },
     }),
     UserModule,
+    CategoriesModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },

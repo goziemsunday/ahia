@@ -345,3 +345,117 @@ Everything is catch-all via the global `HttpExceptionFilter`:
 - `ZodValidationException` → 400 with per-field issues
 - `APIError` from Better Auth → `UnauthorizedException`, `BadRequestException`, etc. → proper HTTP status
 - No try/catch needed in controller
+
+---
+
+# Phase 3: Categories Module
+
+## Goal
+
+Port the six category routes (3 public GET, 3 admin write) from the Hono API to NestJS. More complex than User — introduces service layer with transactions, slug generation, and RBAC via `@UserHasPermission()`.
+
+## 3.1 — New files
+
+```
+apps/nest/src/common/dto/
+└── shared.dto.ts                        ← single file, all shared DTOs
+
+apps/nest/src/lib/
+├── slug.ts                              ← port from Hono (buildBaseSlug, resolveSlugCollision)
+└── types.ts                             ← updated with DbOrTx type
+
+apps/nest/src/category/
+├── categories.controller.ts
+├── categories.module.ts
+├── categories.service.ts
+├── categories.dto.ts
+├── categories.types.ts
+└── categories.utils.ts                  ← utility functions (findCategoryByCaseInsensitiveName, generateUniqueCategorySlug)
+```
+
+## 3.2 — `apps/nest/src/common/dto/shared.dto.ts`
+
+```ts
+import { createZodDto } from "nestjs-zod";
+import { z } from "zod";
+
+export class UuidParamDto extends createZodDto(
+  z.object({ id: z.string().uuid() }),
+) {}
+
+export class PaginationQueryDto extends createZodDto(
+  z.object({
+    page: z.coerce.number().int().positive().default(1).optional(),
+    limit: z.coerce.number().int().positive().optional(),
+  }),
+) {}
+
+export class LimitQueryDto extends createZodDto(
+  z.object({ limit: z.coerce.number().int().positive().optional() }),
+) {}
+```
+
+## 3.3 — `apps/nest/src/category/categories.dto.ts`
+
+```ts
+import { createZodDto } from "nestjs-zod";
+import {
+  CreateCategorySchema,
+  UpdateCategorySchema,
+} from "@repo/db/validators/product.validator";
+
+export class CreateCategoryDto extends createZodDto(CreateCategorySchema) {}
+export class UpdateCategoryDto extends createZodDto(UpdateCategorySchema) {}
+```
+
+## 3.4 — Routes
+
+| Method   | Path              | Auth                                                                       | DTO                                  | Handler                    |
+| -------- | ----------------- | -------------------------------------------------------------------------- | ------------------------------------ | -------------------------- |
+| `GET`    | `/categories`     | `@AllowAnonymous()`                                                        | `PaginationQueryDto`                 | `service.getAll`           |
+| `GET`    | `/categories/top` | `@AllowAnonymous()`                                                        | `LimitQueryDto`                      | `service.getTop`           |
+| `GET`    | `/categories/:id` | `@AllowAnonymous()`                                                        | `UuidParamDto`                       | `service.getOneById` → 404 |
+| `POST`   | `/categories`     | `@UserHasPermission({permission:{category:["create","update","delete"]}})` | `CreateCategoryDto`                  | `service.create(name)`     |
+| `PUT`    | `/categories/:id` | `@UserHasPermission({permission:{category:["create","update","delete"]}})` | `UuidParamDto` + `UpdateCategoryDto` | `service.update(id, name)` |
+| `DELETE` | `/categories/:id` | `@UserHasPermission({permission:{category:["create","update","delete"]}})` | `UuidParamDto`                       | `service.delete(id)`       |
+
+Uses `@UserHasPermission` (granular, from the Better Auth NestJS library) instead of `@Roles` — maps directly to the Hono API's `permit({ category: [...] })` middleware.
+
+## 3.5 — `categories.service.ts`
+
+`@Injectable()`, imports `db` from `@repo/db`. Single entry point for all data access — reads and writes:
+
+| Method                  | Transaction | Errors                                                  | Description                                                                                           |
+| ----------------------- | ----------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `getAll(page?, limit?)` | —           | —                                                       | Paginated list with `productCount`                                                                    |
+| `getTop(limit?)`        | —           | —                                                       | Top N sorted by product count (desc)                                                                  |
+| `getOneById(id)`        | —           | `NotFoundException`                                     | Single category with products                                                                         |
+| `getByIds(ids)`         | —           | —                                                       | Bulk check (used by product module) — placeholder                                                     |
+| `create(name)`          | ✅          | `ConflictException`                                     | Trim, check uniqueness (case-insensitive), generate slug, insert                                      |
+| `update(id, name)`      | ✅          | `NotFoundException`, `ConflictException`                | Check existence, short-circuit if same name, check uniqueness (exclude self), regenerate slug, update |
+| `delete(id)`            | ✅          | `NotFoundException`, `ConflictException` (has products) | Check existence, reject if products associated, delete                                                |
+
+Service throws `HttpException` subclasses (`NotFoundException`, `ConflictException`) on failure — global filter handles them. No discriminated union return types, no `try/catch` needed in the service.
+
+## 3.6 — `categories.controller.ts`
+
+- Injects only `CategoriesService`
+- Public GET routes use `@AllowAnonymous()`
+- Write routes use `@UserHasPermission({ permission: { category: ["create", "update", "delete"] } })`
+- No `try/catch` — service throws NestJS exceptions, filter handles them
+- POST defaults to 201 (NestJS convention)
+
+## 3.7 — Register in `AppModule`
+
+```diff
+ imports: [
+   HealthModule,
+   UserModule,
++  CategoriesModule,
+   AuthModule.forRoot({...}),
+ ],
+```
+
+## 3.8 — Frontend
+
+Check `apps/web/src/features/categories/` for any response-dependent code. Likely no changes needed — frontend already consumes `{ data }` via `successResSchema()`.
