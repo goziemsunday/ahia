@@ -15,3 +15,10 @@ export class PaginationQueryDto extends createZodDto(
     limit: z.coerce.number().int().positive().optional(),
   }),
 ) {}
+
+export class SearchQueryDto extends createZodDto(
+  z.object({
+    q: z.string().min(1),
+    limit: z.coerce.number().int().positive().optional(),
+  }),
+) {}

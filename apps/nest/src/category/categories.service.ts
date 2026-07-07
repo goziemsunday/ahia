@@ -32,7 +32,7 @@ export class CategoriesService {
           columns: { id: true },
         },
       },
-    };
+    } as const;
 
     const result = await db.query.category.findMany(queryOpts);
 

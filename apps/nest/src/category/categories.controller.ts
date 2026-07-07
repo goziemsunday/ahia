@@ -41,7 +41,6 @@ export class CategoriesController {
       query.page,
       query.limit,
     );
-
     const pagination = buildPagination(query.page, query.limit, total);
 
     return successResponse(categories, pagination);

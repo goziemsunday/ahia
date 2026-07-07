@@ -9,8 +9,8 @@ import {
   PaginationQuerySchema,
   SearchQuerySchema,
   ShopQuerySchema,
-  UuidParamSchema,
   UpdateProductSchema,
+  UuidParamSchema,
 } from "@/lib/schemas";
 import { buildPagination, errorResponse, successResponse } from "@/lib/utils";
 import { authed } from "@/middleware/authed";

@@ -7,6 +7,7 @@ import { CategoriesModule } from "./category/categories.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { HealthModule } from "./health/health.module";
 import { auth } from "./lib/auth";
+import { ProductsModule } from "./products/products.module";
 import { UserModule } from "./user/user.module";
 
 @Module({
@@ -18,6 +19,7 @@ import { UserModule } from "./user/user.module";
     }),
     UserModule,
     CategoriesModule,
+    ProductsModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },
