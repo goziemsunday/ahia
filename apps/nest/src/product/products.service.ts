@@ -1,23 +1,26 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import { z } from "zod";
 
-import { count, db, DbOrTx, desc, ilike, sql, sum } from "@repo/db";
+import { count, db, DbOrTx, desc, eq, ilike, sql, sum } from "@repo/db";
 import { orderItem } from "@repo/db/schemas/order.schema";
 import { product, productCategory } from "@repo/db/schemas/product.schema";
 
 import { CategoriesService } from "../category/categories.service";
+import { MAX_PRODUCT_IMAGES, MIN_PRODUCT_IMAGES } from "../lib/file";
 import { InStockSchema } from "./product.validators";
-import { CreateProductDto } from "./products.dto";
+import { CreateProductDto, UpdateProductDto } from "./products.dto";
 import {
   InStockItem,
   ProductWithRelations,
   ShopQueryType,
 } from "./products.types";
 import {
+  cleanupUploadedImages,
   generateUniqueProductSlug,
   uploadProductImages,
   withImageRollback,
@@ -353,7 +356,7 @@ export class ProductsService {
     // and we store it pre-formatted (eg. "12.50") for stable display.
     const price = priceFloat.toFixed(2);
 
-    // validate stock quantity: ensure the stock qty is above 0
+    // validate stock quantity: ensure the stock qty is a non-negative number
     const stockQty = Number.parseInt(body.stockQuantity, 10);
     if (Number.isNaN(stockQty) || stockQty < 0) {
       throw new BadRequestException(
@@ -361,8 +364,8 @@ export class ProductsService {
       );
     }
 
-    // validate sizes & colors: ensure each size & color is unique and the stock quantity
-    // is aboove 0
+    // validate sizes & colors: ensure each size & color is unique and that there is
+    // at least one size and color when stock quantity is greater than 0
     this.validateVariants("sizes", sizes, stockQty);
     this.validateVariants("colors", colors, stockQty);
 
@@ -422,10 +425,228 @@ export class ProductsService {
 
         // refetch the complete product inside the transaction so the
         // read is consistent with the writes (no concurrent-delete race)
-        const full = await this.getOne(newProduct.id, tx);
-        return full;
+        return await this.getOne(newProduct.id, tx);
       });
     });
+  }
+
+  // update product
+  async update(
+    productId: string,
+    body: UpdateProductDto,
+    images: Express.Multer.File[],
+  ): Promise<ProductWithRelations> {
+    // ensure product already exists
+    const existing = await this.getOne(productId);
+
+    // parse JSON strings from the form
+    const sizes = body.sizes
+      ? this.parseJsonString("sizes", body.sizes, InStockSchema)
+      : existing.sizes;
+    const colors = body.colors
+      ? this.parseJsonString("colors", body.colors, InStockSchema)
+      : existing.colors;
+    const categoryIds = body.categoryIds
+      ? this.parseJsonString(
+          "categoryIds",
+          body.categoryIds,
+          z.uuid({ message: "Must be a valid UUID" }),
+        )
+      : existing.categories.map((cat) => cat.id);
+
+    // `keepImageKeys` defaults to "keep all existing" when the client omits the field
+    // entirely. we ensure this by adding the keys of the existing images of the product to
+    // `keepImageKeys`.if an empty array is sent by the client, this will be interpreted as
+    // "delete all existing images".
+    // we also ensure that the `keepImageKeys` sent from the client contain keys that
+    // actually belong to the product images.
+    let keepImageKeys: string[];
+    if (body.keepImageKeys !== undefined) {
+      keepImageKeys = Array.from(
+        new Set(
+          this.parseJsonString("keepImageKeys", body.keepImageKeys, z.string()),
+        ),
+      );
+      const existingImageKeys = new Set(existing.images.map((img) => img.key));
+      const invalid = keepImageKeys.filter((k) => !existingImageKeys.has(k));
+      if (invalid.length > 0) {
+        throw new BadRequestException(
+          invalid.length === 1
+            ? `Invalid image key: '${invalid[0]}' doesn't exist in this product`
+            : `Invalid image keys: '${invalid.join("', '")}' don't exist in this product`,
+        );
+      }
+    } else {
+      keepImageKeys = Array.from(
+        new Set(existing.images.map((img) => img.key)),
+      );
+    }
+
+    // ensure that the final image count is not below or above the limits
+    const totalImgCount = keepImageKeys.length + images.length;
+    if (totalImgCount < MIN_PRODUCT_IMAGES) {
+      throw new BadRequestException("At least 1 image is required");
+    }
+    if (totalImgCount > MAX_PRODUCT_IMAGES) {
+      throw new BadRequestException("Maximum 3 images allowed");
+    }
+
+    // validate price: ensure the price (if provided) is a positive number
+    // if not provided, use the existing price
+    const priceFloat = Number.parseFloat(body.price ?? existing.price);
+    if (Number.isNaN(priceFloat) || priceFloat <= 0) {
+      throw new BadRequestException("Price must be a positive number");
+    }
+    // price is turned back into a string here because the DB column is numeric(10,2)
+    // and we store it pre-formatted (eg. "12.50") for stable display.
+    const price = priceFloat.toFixed(2);
+
+    // validate stock quantity: ensure the stock qty is a non-negative number
+    const stockQty = Number.parseInt(
+      body.stockQuantity ?? String(existing.stockQuantity ?? 0),
+      10,
+    );
+    if (Number.isNaN(stockQty) || stockQty < 0) {
+      throw new BadRequestException(
+        "Stock quantity must be a non-negative number",
+      );
+    }
+
+    // validate sizes & colors: ensure each size & color is unique and that there is
+    // at least one size and color when stock quantity is greater than 0
+    this.validateVariants("sizes", sizes, stockQty);
+    this.validateVariants("colors", colors, stockQty);
+
+    // validate categories: ensure the product is associated with at least one category
+    if (categoryIds.length === 0) {
+      throw new BadRequestException("At least one category is required");
+    }
+
+    // ensure categories actually exists
+    const categories = await this.categoriesService.getByIds(categoryIds);
+    if (categories.length !== categoryIds.length) {
+      throw new BadRequestException("One or more categories not found");
+    }
+
+    const name = body.name ? body.name.trim() : existing.name;
+    const description =
+      body.description !== undefined
+        ? body.description.trim()
+        : existing.description;
+
+    // generate slugs
+    const baseSlug = name.toLowerCase();
+    const slug =
+      name === existing.name
+        ? existing.slug
+        : await generateUniqueProductSlug(baseSlug, productId);
+
+    // upload images to R2
+    const webFiles = images.map(
+      (f) =>
+        new File([f.buffer as BlobPart], f.originalname, { type: f.mimetype }),
+    );
+    const uploaded = await uploadProductImages(webFiles);
+
+    // DB write inside transaction + R2 rollback wrapper
+    const updatedProducts = await withImageRollback(uploaded, async () => {
+      return await db.transaction(async (tx) => {
+        const keptImages = existing.images.filter((img) =>
+          keepImageKeys.includes(img.key),
+        );
+        const imagesUpdate = [...keptImages, ...uploaded];
+
+        // execute the update
+        const [updatedProduct] = await tx
+          .update(product)
+          .set({
+            name,
+            description,
+            slug,
+            price,
+            stockQuantity: stockQty,
+            sizes,
+            colors,
+            images: imagesUpdate,
+          })
+          .where(eq(product.id, productId))
+          .returning();
+
+        // replace category associations if categoryIds was provided
+        await tx
+          .delete(productCategory)
+          .where(eq(productCategory.productId, productId));
+        if (categoryIds.length > 0) {
+          await tx.insert(productCategory).values(
+            categoryIds.map((categoryId) => ({
+              productId,
+              categoryId,
+            })),
+          );
+        }
+
+        // refetch the complete product inside the transaction for consistency
+        return await this.getOne(updatedProduct.id, tx);
+      });
+    });
+
+    // this runs after the transaction commits. if it fails, the DB is still correct,
+    // since the product no longer references those images.
+    try {
+      if (images.length > 0) {
+        const imagesToDelete = existing.images
+          .filter((img) => !keepImageKeys.includes(img.key))
+          .map((img) => img.key);
+
+        if (imagesToDelete.length > 0) {
+          await cleanupUploadedImages(imagesToDelete.map((key) => ({ key })));
+        }
+      }
+    } catch {
+      console.error("update product old images cleanup failed");
+    }
+
+    return updatedProducts;
+  }
+
+  // delete product
+  async delete(productId: string): Promise<ProductWithRelations> {
+    // ensure product already exists
+    const existing = await this.getOne(productId);
+
+    // block deletion if the product is related to any cart item or order item
+    const cartItems = await db.query.cartItem.findMany({
+      where: (ci, { eq }) => eq(ci.productId, productId),
+      columns: { id: true },
+    });
+    const orderItems = await db.query.orderItem.findMany({
+      where: (oi, { eq }) => eq(oi.productId, productId),
+      columns: { id: true },
+    });
+    if (cartItems.length > 0 || orderItems.length > 0) {
+      const deps: string[] = [];
+      if (cartItems.length > 0) deps.push("user carts");
+      if (orderItems.length > 0) deps.push("orders");
+      throw new ConflictException(
+        `Product cannot be deleted as it exists in ${deps.join(" and ")}`,
+      );
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.delete(product).where(eq(product.id, productId));
+    });
+
+    // clean up images from R2. if this fails, the the product is already gone from
+    // the DB and the images orphaned.
+    try {
+      if (existing.images.length > 0) {
+        await cleanupUploadedImages(existing.images);
+      }
+    } catch {
+      console.error("deleted product images cleanup failed");
+    }
+
+    return existing;
   }
 
   // parse JSON strings and return JSON data

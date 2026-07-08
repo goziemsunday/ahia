@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseFilePipe,
   Post,
+  Put,
   Query,
   UploadedFiles,
   UseInterceptors,
@@ -26,7 +28,11 @@ import {
 import { SuccessRes } from "../lib/types";
 import { buildPagination, successResponse } from "../lib/utils";
 import { productImageValidators } from "./product.validators";
-import { CreateProductDto, ShopQueryDto } from "./products.dto";
+import {
+  CreateProductDto,
+  ShopQueryDto,
+  UpdateProductDto,
+} from "./products.dto";
 import { ProductsService } from "./products.service";
 import { ProductWithRelations } from "./products.types";
 
@@ -110,9 +116,7 @@ export class ProductsController {
 
   @Post()
   @UseInterceptors(FilesInterceptor("images", 3))
-  @UserHasPermission({
-    permission: { product: ["create", "update", "delete"] },
-  })
+  @UserHasPermission({ permission: { product: ["create"] } })
   async create(
     @Body() body: CreateProductDto,
     @UploadedFiles(new ParseFilePipe({ validators: productImageValidators }))
@@ -125,5 +129,34 @@ export class ProductsController {
       session.user.id,
     );
     return successResponse(newProduct);
+  }
+
+  @Put(":id")
+  @UseInterceptors(FilesInterceptor("images", 3))
+  @UserHasPermission({ permission: { product: ["update"] } })
+  async update(
+    @Param() param: UuidParamDto,
+    @Body() body: UpdateProductDto,
+    @UploadedFiles(
+      new ParseFilePipe({
+        validators: productImageValidators,
+        fileIsRequired: false,
+      }),
+    )
+    images: Express.Multer.File[],
+  ) {
+    const updatedProduct = await this.productsService.update(
+      param.id,
+      body,
+      images,
+    );
+    return successResponse(updatedProduct);
+  }
+
+  @Delete(":id")
+  @UserHasPermission({ permission: { product: ["delete"] } })
+  async delete(@Param() param: UuidParamDto) {
+    const deletedProducts = await this.productsService.delete(param.id);
+    return successResponse(deletedProducts);
   }
 }

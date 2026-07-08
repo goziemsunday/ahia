@@ -68,18 +68,14 @@ export class CategoriesController {
   }
 
   @Post()
-  @UserHasPermission({
-    permission: { category: ["create", "update", "delete"] },
-  })
+  @UserHasPermission({ permission: { category: ["create"] } })
   async create(@Body() body: CreateCategoryDto): Promise<SuccessRes<Category>> {
     const newCategory = await this.categoriesService.create(body.name);
     return successResponse(newCategory);
   }
 
   @Put(":id")
-  @UserHasPermission({
-    permission: { category: ["create", "update", "delete"] },
-  })
+  @UserHasPermission({ permission: { category: ["update"] } })
   async update(
     @Param() param: UuidParamDto,
     @Body() body: CreateCategoryDto,
@@ -92,9 +88,7 @@ export class CategoriesController {
   }
 
   @Delete(":id")
-  @UserHasPermission({
-    permission: { category: ["create", "update", "delete"] },
-  })
+  @UserHasPermission({ permission: { category: ["delete"] } })
   async delete(@Param() param: UuidParamDto): Promise<SuccessRes<Category>> {
     const deletedCategory = await this.categoriesService.delete(param.id);
     return successResponse(deletedCategory);

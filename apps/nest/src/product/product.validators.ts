@@ -8,13 +8,9 @@ export const productImageValidators = [
     maxSize: MAX_FILE_SIZE,
     errorMessage: `File size must be less than ${MAX_FILE_SIZE / 1024 / 1024}MB`,
   }),
-  ...ALLOWED_FILE_TYPES.map(
-    (type) =>
-      new FileTypeValidator({
-        fileType: type,
-        errorMessage: `File type must be one of: ${ALLOWED_FILE_TYPES.join(", ")}`,
-      }),
-  ),
+  new FileTypeValidator({
+    fileType: new RegExp(`^(${ALLOWED_FILE_TYPES.join("|")})$`),
+  }),
 ];
 
 export const InStockSchema = z.object({

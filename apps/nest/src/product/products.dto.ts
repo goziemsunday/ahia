@@ -45,3 +45,38 @@ export class CreateProductDto extends createZodDto(
       ),
   }),
 ) {}
+
+export class UpdateProductDto extends createZodDto(
+  z.object({
+    name: z.string().min(1).optional(),
+    description: z.string().min(1).optional(),
+    price: z
+      .string()
+      .min(1)
+      .regex(/^\d+(\.\d{2})?$/)
+      .optional(),
+    stockQuantity: z.string().optional(),
+    sizes: z
+      .string()
+      .optional()
+      .describe(
+        `JSON stringified array of size objects, e.g. [{"name":"S","inStock":true}]`,
+      ),
+    colors: z
+      .string()
+      .optional()
+      .describe(
+        `JSON stringified array of color objects, e.g. [{"name":"Red","inStock":true}]`,
+      ),
+    categoryIds: z
+      .string()
+      .optional()
+      .describe(
+        `JSON stringified array of category ID strings, e.g. ["123e4567-e89b-12d3-a456-426614174000"]`,
+      ),
+    keepImageKeys: z
+      .string()
+      .optional()
+      .describe(`JSON array of image keys to keep`),
+  }),
+) {}
