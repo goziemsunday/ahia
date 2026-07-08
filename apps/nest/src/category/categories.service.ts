@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
-import { count, db, eq } from "@repo/db";
+import { count, db, eq, inArray } from "@repo/db";
 import { category } from "@repo/db/schemas/product.schema";
 
 import { buildBaseSlug } from "../lib/slug";
@@ -45,6 +45,13 @@ export class CategoriesService {
 
     // return total together with categories to build pagination object
     return { categories, total };
+  }
+
+  // get categories by their IDs
+  async getByIds(ids: string[]): Promise<Category[]> {
+    return await db.query.category.findMany({
+      where: (c) => inArray(c.id, ids),
+    });
   }
 
   // get top categories

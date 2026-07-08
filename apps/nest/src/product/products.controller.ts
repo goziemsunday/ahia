@@ -1,5 +1,21 @@
-import { Controller, Get, Param, Query } from "@nestjs/common";
-import { AllowAnonymous } from "@thallesp/nestjs-better-auth";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseFilePipe,
+  Post,
+  Query,
+  UploadedFiles,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FilesInterceptor } from "@nestjs/platform-express";
+import {
+  AllowAnonymous,
+  Session,
+  UserHasPermission,
+  type UserSession,
+} from "@thallesp/nestjs-better-auth";
 
 import {
   LimitQueryDto,
@@ -9,7 +25,8 @@ import {
 } from "../common/dto/shared.dto";
 import { SuccessRes } from "../lib/types";
 import { buildPagination, successResponse } from "../lib/utils";
-import { ShopQueryDto } from "./products.dto";
+import { productImageValidators } from "./product.validators";
+import { CreateProductDto, ShopQueryDto } from "./products.dto";
 import { ProductsService } from "./products.service";
 import { ProductWithRelations } from "./products.types";
 
@@ -89,5 +106,24 @@ export class ProductsController {
   ): Promise<SuccessRes<ProductWithRelations>> {
     const product = await this.productsService.getOne(param.id);
     return successResponse(product);
+  }
+
+  @Post()
+  @UseInterceptors(FilesInterceptor("images", 3))
+  @UserHasPermission({
+    permission: { product: ["create", "update", "delete"] },
+  })
+  async create(
+    @Body() body: CreateProductDto,
+    @UploadedFiles(new ParseFilePipe({ validators: productImageValidators }))
+    images: Express.Multer.File[],
+    @Session() session: UserSession,
+  ) {
+    const newProduct = await this.productsService.create(
+      body,
+      images,
+      session.user.id,
+    );
+    return successResponse(newProduct);
   }
 }
