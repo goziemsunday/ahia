@@ -1182,5 +1182,536 @@ Imports `ProductsModule` so `CartService` can inject `ProductsService` for produ
     CategoriesModule,
     ProductsModule,
 +   CartModule,
++   OrderModule,
++   WebhookModule,
   ],
 ```
+
+---
+
+# Phase 6: Orders Module
+
+## Goal
+
+Port the 4 order routes + Stripe webhook from the Hono API to NestJS. This is the most complex module — involves Stripe Checkout Session creation, manual webhook signature verification, stock reservation/restoration, and email notifications.
+
+The order logic is split into two modules:
+
+- **`OrderModule`** — user-facing endpoints (`/orders/*`) with auth
+- **`WebhookModule`** — Stripe webhook endpoint (`/webhooks/stripe`) with no auth, configured for raw body access
+
+## 6.1 — New files
+
+```
+apps/nest/src/order/
+├── order.controller.ts
+├── order.service.ts
+├── order.module.ts
+├── order.dto.ts
+└── order.types.ts
+
+apps/nest/src/webhook/
+├── webhook.controller.ts
+└── webhook.module.ts
+```
+
+No `lib/stripe.ts` needed — the NestJS app already has Stripe installed via the workspace. The Stripe client is instantiated in `order.service.ts` and `webhook.controller.ts` directly.
+
+## 6.2 — `order.dto.ts`
+
+```ts
+import { createZodDto } from "nestjs-zod";
+import { z } from "zod";
+
+export class VerifySessionDto extends createZodDto(
+  z.object({ sessionId: z.string() }),
+) {}
+```
+
+Only one DTO — `POST /orders/verify-session` takes a `sessionId` string. `POST /orders/create-checkout` takes no body. GET routes use `UuidParamDto` and `PaginationQueryDto` from shared DTOs.
+
+## 6.3 — `order.types.ts`
+
+Type aliases from `@repo/db/validators/order.validator`:
+
+```ts
+import { z } from "zod";
+import {
+  CreateCheckoutResponseSchema,
+  OrderSelectSchema,
+} from "@repo/db/validators/order.validator";
+
+export type OrderWithItems = z.infer<typeof OrderSelectSchema>;
+export type CheckoutResponse = z.infer<typeof CreateCheckoutResponseSchema>;
+```
+
+## 6.4 — `order.service.ts`
+
+`@Injectable()`, injects `CartService` and `ProductsService`.
+
+### Methods
+
+| Method                               | Transaction | Throws                                                | Notes                                                                                                                                                                                           |
+| ------------------------------------ | ----------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getUserOrders(userId, page, limit)` | —           | —                                                     | Paginated order history with items + products. Drizzle `findMany` with `where: eq(order.userId, userId)`, `with: { orderItems: { with: { product: true } } }`, `orderBy: desc(order.createdAt)` |
+| `getOrderById(userId, orderId)`      | —           | `NotFoundException`                                   | Single order. Ownership check: `order.userId !== userId` → 404 (same as Hono — don't reveal existence of other users' orders)                                                                   |
+| `createCheckout(userId, userEmail)`  | ✅          | `BadRequestException`, `UnprocessableEntityException` | See full flow below                                                                                                                                                                             |
+| `verifySession(userId, sessionId)`   | ✅          | `NotFoundException`                                   | Retrieve Stripe session, check payment status, update order, clear cart, fire-and-forget receipt email                                                                                          |
+
+### `createCheckout` flow
+
+1. Fetch user's cart via `CartService.getCart()`
+2. Validate cart is not empty → `BadRequestException`
+3. Validate each cart item:
+   - Product still exists (via `ProductsService.getOne`)
+   - Sufficient stock → `UnprocessableEntityException` with INSUFFICIENT_STOCK or INVALID_CART_STATE
+4. Calculate total amount from cart items
+5. DB transaction:
+   - Generate order number via `generateOrderNumber()` (ported from `order-queries.ts`)
+   - Insert order row: `orderNumber, userId, email, totalAmount, status: "pending", paymentStatus: "pending"`
+   - Insert order item rows: `orderId, productId, quantity, unitPrice, subTotal`
+   - Reserve stock: `db.update(product).set({ stockQuantity: sql\`${product.stockQuantity} - ${item.quantity}\` })`
+   - Create Stripe Checkout Session via `stripe.checkout.sessions.create()`
+   - Update order with `stripeCheckoutSessionId`
+6. Refetch order with relations
+7. Return `CheckoutResponse`: `{ order, checkoutUrl, checkoutSessionId, stripePublishableKey }`
+
+### `verifySession` flow
+
+1. Retrieve Stripe session via `stripe.checkout.sessions.retrieve(sessionId)`
+2. Look up order by `stripeCheckoutSessionId`
+3. Ownership check: `order.userId !== userId` → 404
+4. If order status is `pending` and session payment is `paid`:
+   - Update order: `status: "completed"`, `paymentStatus: "paid"`, `paymentMethod`
+   - Clear user's cart (via `CartService` or direct `db.delete`)
+   - Fire-and-forget: send receipt email (call the ported email helper)
+5. Return updated order
+
+## 6.5 — `order.controller.ts`
+
+```ts
+@Controller("orders")
+export class OrderController {
+  constructor(private orderService: OrderService) {}
+}
+```
+
+4 routes, all require auth (no `@AllowAnonymous`).
+
+| Method | Path                      | DTO                  | Handler                  |
+| ------ | ------------------------- | -------------------- | ------------------------ |
+| `GET`  | `/orders`                 | `PaginationQueryDto` | `service.getUserOrders`  |
+| `GET`  | `/orders/:id`             | `UuidParamDto`       | `service.getOrderById`   |
+| `POST` | `/orders/create-checkout` | —                    | `service.createCheckout` |
+| `POST` | `/orders/verify-session`  | `VerifySessionDto`   | `service.verifySession`  |
+
+All return `SuccessRes<OrderWithItems>` or `SuccessRes<CheckoutResponse>` via `successResponse()`.
+
+## 6.6 — `order.module.ts`
+
+```ts
+import { Module } from "@nestjs/common";
+import { CartModule } from "../cart/cart.module";
+import { ProductsModule } from "../product/products.module";
+import { OrderController } from "./order.controller";
+import { OrderService } from "./order.service";
+
+@Module({
+  imports: [CartModule, ProductsModule],
+  controllers: [OrderController],
+  providers: [OrderService],
+})
+export class OrderModule {}
+```
+
+## 6.7 — `webhook.controller.ts`
+
+No `@AllowAnonymous` — no auth guards at all. Uses `@Req() req: Request` to access `req.rawBody` and the `stripe-signature` header.
+
+### Endpoint
+
+| Method | Path               | Auth            | Handler         |
+| ------ | ------------------ | --------------- | --------------- |
+| `POST` | `/webhooks/stripe` | None (raw body) | `handleWebhook` |
+
+### `handleWebhook` flow
+
+1. Extract `stripe-signature` header → 400 if missing
+2. Read `req.rawBody` (set by `AuthModule.forRoot({ bodyParser: { rawBody: true } })`)
+3. Manual signature verification (port `verifyAndParseWebhook` from Hono's `stripe.route.ts`):
+   - Parse `t=TIMESTAMP,v1=SIG` header format
+   - Check timestamp within 300s tolerance
+   - Compute `HMAC-SHA256("timestamp.body", webhookSecret)`
+   - Constant-time comparison against `v1` signatures
+4. Route by event type:
+   - `checkout.session.completed` → update order to `completed`/`paid`, clear cart, fire-and-forget receipt email
+   - `checkout.session.expired` → update order to `cancelled`/`failed`, restore stock
+   - `checkout.session.async_payment_failed` → same as expired
+5. Return `{ received: true }` with 200
+
+No `@Controller("webhooks")` — set `@Controller()` with empty prefix, then mount manually at `/api/webhooks/stripe` via `app.use()` or configure a custom route in `main.ts`. This avoids global prefix interference.
+
+## 6.8 — `webhook.module.ts`
+
+```ts
+import { Module } from "@nestjs/common";
+import { WebhookController } from "./webhook.controller";
+
+@Module({
+  controllers: [WebhookController],
+})
+export class WebhookModule {}
+```
+
+## 6.9 — Update `main.ts` for webhook route
+
+The global prefix `/api` applies to all controllers. The webhook controller needs to sit outside the default routing. Two approaches:
+
+**Approach A** (Recommended): Use a custom route path in the controller that includes the full path:
+
+```ts
+@Controller("api/webhooks/stripe")
+export class WebhookController {
+  @Post()
+  async handleWebhook(@Req() req: Request) { ... }
+}
+```
+
+This works with the existing `setGlobalPrefix("api")` — the full path becomes `/api/api/webhooks/stripe` → **wrong**.
+
+**Approach B**: Set `globalPrefixOptions: { exclude: ['webhooks'] }` and give the controller a relative path:
+
+```ts
+// main.ts
+app.setGlobalPrefix("api", { exclude: [{ path: 'webhooks/stripe', method: RequestMethod.POST }] });
+
+// webhook.controller.ts
+@Controller("webhooks/stripe")
+export class WebhookController { ... }
+```
+
+This gives `/webhooks/stripe` — correct, no extra prefix. **But note**: the `ZodValidationPipe` and `ZodSerializerInterceptor` from `AppModule` won't apply to this controller either (since it's excluded from global prefix, and those providers use different mechanisms — they apply globally regardless). Actually, the global pipes/filters/interceptors apply to all controllers regardless of prefix exclusion. So this is the right approach.
+
+## 6.10 — Stock helpers (in `order.service.ts`)
+
+Two pure functions ported from `order-queries.ts` — inlined as private methods:
+
+```ts
+private generateOrderNumber(): string {
+  const year = new Date().getFullYear();
+  const randomSuffix = Math.random().toString().slice(2, 8).padStart(6, "0");
+  return `ORD-${year}-${randomSuffix}`;
+}
+
+private async reserveStock(items: { productId: string; quantity: number }[]): Promise<void> {
+  await Promise.all(
+    items.map((item) =>
+      db.update(product)
+        .set({ stockQuantity: sql`${product.stockQuantity} - ${item.quantity}` })
+        .where(eq(product.id, item.productId)),
+    ),
+  );
+}
+
+private async restoreStock(items: { productId: string; quantity: number }[]): Promise<void> {
+  // Same as reserveStock but with + instead of -
+}
+```
+
+`restoreStock` is used in the webhook controller for expired/failed payments — it can be a utility function exported from `order.service.ts` or defined directly in the webhook controller.
+
+Since the webhook controller doesn't inject `OrderService` (it's a standalone flow), `restoreStock` should live in a shared util or be duplicated in the webhook controller.
+
+## 6.11 — Stripe client
+
+Instantiated in each file that needs it (same pattern as Hono):
+
+```ts
+import Stripe from "stripe";
+import env from "../lib/env";
+
+const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
+  apiVersion: "2026-03-25.dahlia",
+  typescript: true,
+});
+```
+
+This can be a shared export from `order.service.ts` and imported in `webhook.controller.ts`, or defined in a `lib/stripe.ts`.
+
+## 6.12 — Update `apps/nest/src/app.module.ts`
+
+```diff
++import { OrderModule } from "./order/order.module";
++import { WebhookModule } from "./webhook/webhook.module";
+
+  imports: [
+    HealthModule,
+    AuthModule.forRoot({ auth, bodyParser: { rawBody: true } }),
+    UserModule,
+    CategoriesModule,
+    ProductsModule,
+    CartModule,
++   OrderModule,
++   WebhookModule,
+  ],
+```
+
+## 6.13 — Type distribution
+
+| File             | Types                                                                                                 |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| `order.types.ts` | `OrderWithItems` (from `OrderSelectSchema`), `CheckoutResponse` (from `CreateCheckoutResponseSchema`) |
+| Controller       | Returns `SuccessRes<OrderWithItems>` or `SuccessRes<CheckoutResponse>`                                |
+| Service          | Returns `OrderWithItems`, `CheckoutResponse`, or `{ orders: OrderWithItems[]; total: number }`        |
+| Webhook          | No custom types — uses raw DB row types inline                                                        |
+
+## 6.14 — Error mapping
+
+| Hono                                                            | NestJS                                                        |
+| --------------------------------------------------------------- | ------------------------------------------------------------- |
+| `{ type: "emptyCart" }` → 400                                   | `BadRequestException("Cart is empty...")`                     |
+| `{ type: "validationError", code: "INSUFFICIENT_STOCK" }` → 422 | `UnprocessableEntityException("Not enough stock...")`         |
+| `{ type: "validationError", code: "INVALID_CART_STATE" }` → 422 | `UnprocessableEntityException("Product no longer exists...")` |
+| Order not found → 404                                           | `NotFoundException("Order not found")`                        |
+| Unauthorized → 401                                              | Handled by `@thallesp/nestjs-better-auth`                     |
+| Ownership mismatch → 404                                        | `NotFoundException("Order not found")`                        |
+| Server error → 500                                              | Let propagate → global `HttpExceptionFilter`                  |
+
+---
+
+# Phase 7: Admin Module
+
+## Goal
+
+Port the 7 admin dashboard routes (stats, users, orders) from the Hono API to NestJS. Admin uses existing NestJS services for aggregate data where possible, and the Better Auth admin API for user CRUD.
+
+## 7.1 — New files
+
+```
+apps/nest/src/admin/
+├── admin.controller.ts    ← 7 routes, class-level @UserHasPermission
+├── admin.service.ts       ← orchestrates calls to extended services + DB
+├── admin.module.ts        ← imports OrdersModule, ProductsModule
+├── admin.dto.ts           ← DTOs from @repo/db/validators/admin.validator
+└── admin.types.ts         ← StatsOverview, MonthlyStats types
+```
+
+## 7.2 — `admin.dto.ts`
+
+Reuses existing Zod schemas from `@repo/db/validators/admin.validator` plus shared DTOs:
+
+```ts
+import { createZodDto } from "nestjs-zod";
+import { ListUsersQuerySchema } from "@repo/db/validators/admin.validator";
+
+export class ListUsersQueryDto extends createZodDto(ListUsersQuerySchema) {}
+
+// CreateUserDto — TBD (schema defined when POST /users is implemented)
+```
+
+For `POST /admin/users`, the DTO will be added when the route is implemented (per user preference). The remaining routes use `UuidParamDto` and `PaginationQueryDto` from shared DTOs.
+
+## 7.3 — `admin.types.ts`
+
+```ts
+export interface StatsOverview {
+  products: number;
+  revenue: {
+    last24h: { amount: number; count: number };
+    last7d: { amount: number; count: number };
+    last30d: { amount: number; count: number };
+  };
+  totalOrders: number;
+  totalUsers: number;
+}
+
+export interface MonthlyStat {
+  month: string;       // "2024-01"
+  revenue: number;
+  orders: number;
+}
+```
+
+## 7.4 — Extensions to existing services
+
+### `OrdersService` — add 4 methods
+
+```ts
+// Admin overview stats: revenue + order count for 3 time windows
+async getOrderStats(): Promise<{
+  last24h: { amount: number; count: number };
+  last7d: { amount: number; count: number };
+  last30d: { amount: number; count: number };
+}>;
+
+// Monthly aggregation for the last 12 months
+async getMonthlyStats(): Promise<{ month: string; revenue: number; orders: number }[]>;
+
+// Paginated list of all orders (admin view with customer info)
+async getAllOrders(page?: number, limit?: number): Promise<{
+  orders: OrderWithItems[];
+  total: number;
+}>;
+
+// Single order by ID with customer info
+async getOneOrder(id: string): Promise<OrderWithItems>;
+```
+
+Implementation notes:
+- `getOrderStats()` — three `db.select({ count: count(), amount: sum(order.totalAmount) }).from(order).where(...)` queries with different time windows (`gte(order.createdAt, now - interval '24 hours')`, etc.)
+- `getMonthlyStats()` — `db.select({ month: sql<string>\`to_char(created_at, 'YYYY-MM')\`, revenue: sum(order.totalAmount), orders: count() }).from(order).groupBy(sql\`1\`).orderBy(sql\`1\`).limit(12)` — aggregates by month, last 12 months
+- `getAllOrders()` — `db.query.order.findMany()` with `with: { user: true, orderItems: { with: { product: true } } }`, pagination, `orderBy: desc(order.createdAt)`
+- `getOneOrder()` — `db.query.order.findFirst()` with same relations as `getAllOrders`, throws `NotFoundException` if missing
+
+### `ProductsService` — add 1 method
+
+```ts
+async getCount(): Promise<number>;
+```
+
+Implementation:
+```ts
+async getCount(): Promise<number> {
+  const result = await db.select({ count: count() }).from(product);
+  return result[0].count;
+}
+```
+
+## 7.5 — `admin.service.ts`
+
+```ts
+@Injectable()
+export class AdminService {
+  constructor(
+    private ordersService: OrdersService,
+    private productsService: ProductsService,
+  ) {}
+
+  // Uses extended OrdersService and ProductsService, plus raw DB for user count
+}
+```
+
+| Method | Data source | Notes |
+|---|---|---|
+| `getStats()` | `OrdersService.getOrderStats()`, `ProductsService.getCount()`, raw `db.select({ count: count() }).from(user)` | User count from raw DB (no UserService exists) |
+| `getMonthlyStats()` | `OrdersService.getMonthlyStats()` | Passthrough to OrdersService |
+| `getUsers(query)` | `AuthService.api.listUsers()` via Better Auth admin plugin | Paginated, with name/email filters |
+| `getUserById(id)` | `AuthService.api.getUser()` via Better Auth admin plugin | Single user |
+| `getOrders(page, limit)` | `OrdersService.getAllOrders()` | Passthrough |
+| `getOrderById(id)` | `OrdersService.getOneOrder()` | Passthrough |
+| `createUser(body)` | `AuthService.api.createUser()` | TBD — implement when needed |
+
+The service keeps the orchestration thin — most logic lives in the respective domain services. Stats combines 3 calls in parallel:
+
+```ts
+async getStats(): Promise<StatsOverview> {
+  const [orderStats, productCount, userCountResult] = await Promise.all([
+    this.ordersService.getOrderStats(),
+    this.productsService.getCount(),
+    db.select({ count: count() }).from(user),
+  ]);
+
+  return {
+    products: productCount,
+    revenue: orderStats,
+    totalOrders: orderStats.last24h.count + orderStats.last7d.count + orderStats.last30d.count,
+    totalUsers: userCountResult[0].count,
+  };
+}
+```
+
+## 7.6 — `admin.controller.ts`
+
+```ts
+@Controller("admin")
+@UserHasPermission({
+  permission: { user: ["list"], order: ["view-user", "view-all"] },
+})
+export class AdminController {
+  constructor(private adminService: AdminService) {}
+}
+```
+
+Class-level `@UserHasPermission` applies the minimum permissions to all 7 routes. The `POST /users` route layers an additional `@UserHasPermission({ permission: { user: ["create"] } })`.
+
+| Method | Path | DTO | Extra auth | Handler |
+|---|---|---|---|---|
+| `GET` | `/admin/stats` | — | — | `service.getStats()` |
+| `GET` | `/admin/stats/monthly` | — | — | `service.getMonthlyStats()` |
+| `GET` | `/admin/users` | `ListUsersQueryDto` | — | `service.getUsers(query)` |
+| `GET` | `/admin/users/:id` | `UuidParamDto` | — | `service.getUserById(id)` |
+| `POST` | `/admin/users` | *TBD* | `+ @UserHasPermission({ permission: { user: ["create"] } })` | `service.createUser(body)` |
+| `GET` | `/admin/orders` | `PaginationQueryDto` | — | `service.getOrders(page, limit)` |
+| `GET` | `/admin/orders/:id` | `UuidParamDto` | — | `service.getOrderById(id)` |
+
+All return `SuccessRes<T>` via `successResponse()`. Paginated routes use `buildPagination()`.
+
+## 7.7 — `admin.module.ts`
+
+```ts
+import { Module } from "@nestjs/common";
+import { OrdersModule } from "../orders/orders.module";
+import { ProductsModule } from "../product/products.module";
+import { AdminController } from "./admin.controller";
+import { AdminService } from "./admin.service";
+
+@Module({
+  imports: [OrdersModule, ProductsModule],
+  controllers: [AdminController],
+  providers: [AdminService],
+})
+export class AdminModule {}
+```
+
+Imports `OrdersModule` and `ProductsModule` so `AdminService` can inject `OrdersService` and `ProductsService` (both must export their services).
+
+## 7.8 — Update `apps/nest/src/app.module.ts`
+
+```diff
++import { AdminModule } from "./admin/admin.module";
+
+  imports: [
+    HealthModule,
+    AuthModule.forRoot({ auth, bodyParser: { rawBody: true } }),
+    UserModule,
+    CategoriesModule,
+    ProductsModule,
+    CartModule,
+    OrderModule,
+    WebhookModule,
++   AdminModule,
+  ],
+```
+
+## 7.9 — File summary
+
+| File | Lines (est.) | Notes |
+|---|---|---|
+| `admin/dto.ts` | ~10 | Reuses `ListUsersQuerySchema` from validators |
+| `admin/types.ts` | ~15 | `StatsOverview`, `MonthlyStat` interfaces |
+| `admin/service.ts` | ~70 | Orchestration, parallel calls, passthroughs |
+| `admin/controller.ts` | ~80 | 7 routes, class-level + one method-level decorator |
+| `admin/module.ts` | ~10 | Standard module, imports Orders + Products |
+| **Service additions** | | |
+| `orders/orders.service.ts` | +60 | 4 new methods (stats, monthly, admin listing) |
+| `product/products.service.ts` | +6 | 1 new method (`getCount`) |
+| **Total new** | **~185** | |
+
+## 7.10 — Module export requirements
+
+For `AdminModule` to inject `OrdersService` and `ProductsService`:
+
+- `OrdersModule` must have `exports: [OrdersService]` ✅
+- `ProductsModule` must have `exports: [ProductsService]` ⚠️ — needs to be added
+- `CategoriesModule` must have `exports: [CategoriesService]` ⚠️ — needed by `ProductsService` (already injected there)
+
+These are NestJS DI requirements — a provider must be exported by its module to be available to modules that import it.
+
+## 7.11 — Error mapping
+
+| Hono | NestJS |
+|---|---|
+| `{ error: { details } }` → 404 (user/order not found) | `NotFoundException` |
+| `{ error: { details } }` → 409 (duplicate) | `ConflictException` |
+| Unauthorized → 401 | Handled by `@thallesp/nestjs-better-auth` |
+| Forbidden (insufficient permissions) → 403 | Handled by `@UserHasPermission` |

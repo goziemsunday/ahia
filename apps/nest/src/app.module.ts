@@ -8,6 +8,7 @@ import { CategoriesModule } from "./category/categories.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { HealthModule } from "./health/health.module";
 import { auth } from "./lib/auth";
+import { OrdersModule } from "./orders/orders.module";
 import { ProductsModule } from "./product/products.module";
 import { UserModule } from "./user/user.module";
 
@@ -22,6 +23,7 @@ import { UserModule } from "./user/user.module";
     CategoriesModule,
     ProductsModule,
     CartModule,
+    OrdersModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },

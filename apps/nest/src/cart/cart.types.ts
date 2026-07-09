@@ -10,7 +10,7 @@ export type CartItemResponse = {
   productId: string;
   quantity: number;
   subAmount: string;
-  product: typeof import("@repo/db/schemas/product.schema").product.$inferSelect;
+  product: typeof product.$inferSelect;
   createdAt: Date;
   updatedAt: Date;
 };
