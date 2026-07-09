@@ -5,13 +5,11 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-// import { User } from "better-auth";
 import { UserSession } from "@thallesp/nestjs-better-auth";
 
-import { count, db, desc, eq, sql } from "@repo/db";
+import { count, db, desc, eq } from "@repo/db";
 import { cartItem } from "@repo/db/schemas/cart.schema";
 import { order, orderItem } from "@repo/db/schemas/order.schema";
-import { product } from "@repo/db/schemas/product.schema";
 
 import { CartService } from "../cart/cart.service";
 import { sendOrderReceiptEmail } from "../lib/email";
@@ -19,7 +17,7 @@ import env from "../lib/env";
 import { stripe } from "../lib/stripe";
 import { ProductsService } from "../product/products.service";
 import { CheckoutResponse, OrderWithItems } from "./orders.types";
-import { generateOrderNumber } from "./orders.utils";
+import { generateOrderNumber, reserveStock } from "./orders.utils";
 
 @Injectable()
 export class OrdersService {
@@ -117,6 +115,38 @@ export class OrdersService {
     return orderWithItems;
   }
 
+  // update order status
+  async updateStatus(
+    orderId: string,
+    status: string,
+    paymentStatus?: string,
+    paymentMethod?: string,
+  ) {
+    const updateData: Record<string, string> = { status };
+
+    if (paymentStatus) updateData.paymentStatus = paymentStatus;
+    if (paymentMethod) updateData.paymentMethod = paymentMethod;
+
+    await db
+      .update(order)
+      .set(updateData)
+      .where(eq(order.id, orderId))
+      .returning();
+  }
+
+  // clear all items from a user's cart
+  async clearCartByUserId(userId: string) {
+    const userCart = await db.query.cart.findFirst({
+      where: (c, { eq }) => eq(c.userId, userId),
+    });
+    if (!userCart) return;
+
+    await db
+      .delete(cartItem)
+      .where(eq(cartItem.cartId, userCart.id))
+      .returning();
+  }
+
   // create checkout for user
   async createCheckout(
     userId: string,
@@ -188,15 +218,11 @@ export class OrdersService {
       await db.insert(orderItem).values(orderItemsData).returning();
 
       // reserve stock immediately
-      await Promise.all(
-        userCart.cartItems.map((item) =>
-          db
-            .update(product)
-            .set({
-              stockQuantity: sql`${product.stockQuantity} - ${item.quantity}`,
-            })
-            .where(eq(product.id, item.productId)),
-        ),
+      await reserveStock(
+        userCart.cartItems.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
       );
 
       // create Stripe Checkout Session
@@ -290,25 +316,14 @@ export class OrdersService {
       existingOrder.status === "pending" &&
       session.payment_status === "paid"
     ) {
-      const updateOrderData: Record<string, string> = {
-        status: "completed",
-        paymentStatus: "paid",
-        paymentMethod: session.payment_method_types?.[0] || "card",
-      };
+      await this.updateStatus(
+        existingOrder.id,
+        "completed",
+        "paid",
+        session.payment_method_types?.[0] || "card",
+      );
 
-      await db
-        .update(order)
-        .set(updateOrderData)
-        .where(eq(order.id, existingOrder.id))
-        .returning();
-
-      const userCart = await this.cartService.getCart(user.id);
-
-      // clear all items from the cart
-      await db
-        .delete(cartItem)
-        .where(eq(cartItem.cartId, userCart.id))
-        .returning();
+      await this.clearCartByUserId(user.id);
 
       // send receipt email
       const orderWithReceipt = await this.getOneById(existingOrder.id);
