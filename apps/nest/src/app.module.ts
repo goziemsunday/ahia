@@ -3,11 +3,12 @@ import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
 import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { ZodSerializerInterceptor, ZodValidationPipe } from "nestjs-zod";
 
+import { CartModule } from "./cart/cart.module";
 import { CategoriesModule } from "./category/categories.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { HealthModule } from "./health/health.module";
 import { auth } from "./lib/auth";
-import { ProductsModule } from "./products/products.module";
+import { ProductsModule } from "./product/products.module";
 import { UserModule } from "./user/user.module";
 
 @Module({
@@ -20,6 +21,7 @@ import { UserModule } from "./user/user.module";
     UserModule,
     CategoriesModule,
     ProductsModule,
+    CartModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },

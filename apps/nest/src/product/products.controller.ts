@@ -122,7 +122,7 @@ export class ProductsController {
     @UploadedFiles(new ParseFilePipe({ validators: productImageValidators }))
     images: Express.Multer.File[],
     @Session() session: UserSession,
-  ) {
+  ): Promise<SuccessRes<ProductWithRelations>> {
     const newProduct = await this.productsService.create(
       body,
       images,
@@ -144,7 +144,7 @@ export class ProductsController {
       }),
     )
     images: Express.Multer.File[],
-  ) {
+  ): Promise<SuccessRes<ProductWithRelations>> {
     const updatedProduct = await this.productsService.update(
       param.id,
       body,
@@ -155,8 +155,10 @@ export class ProductsController {
 
   @Delete(":id")
   @UserHasPermission({ permission: { product: ["delete"] } })
-  async delete(@Param() param: UuidParamDto) {
-    const deletedProducts = await this.productsService.delete(param.id);
-    return successResponse(deletedProducts);
+  async delete(
+    @Param() param: UuidParamDto,
+  ): Promise<SuccessRes<ProductWithRelations>> {
+    const deletedProduct = await this.productsService.delete(param.id);
+    return successResponse(deletedProduct);
   }
 }

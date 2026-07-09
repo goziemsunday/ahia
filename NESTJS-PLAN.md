@@ -1025,3 +1025,162 @@ NestJS matches routes top-to-bottom, so `:id` must come after all static paths t
 ## 4.17 — Frontend
 
 No frontend changes expected — `apps/web` already consumes `{ data }` via `successResSchema()` and `{ error: { details } }` via `errorResSchema`. Product-specific frontend schemas are inferred from `@repo/db/validators/*` at build time.
+
+---
+
+# Phase 5: Cart Module
+
+## Goal
+
+Port the 5 cart routes (all require auth) from the Hono API to NestJS. Cart follows the same service pattern as Categories/Products — single service class, NestJS exceptions, no discriminated union return types.
+
+## 5.1 — New files
+
+```
+apps/nest/src/cart/
+├── cart.controller.ts
+├── cart.module.ts
+├── cart.service.ts
+├── cart.dto.ts
+├── cart.types.ts
+└── cart.utils.ts
+```
+
+## 5.2 — `cart.dto.ts`
+
+```ts
+import { createZodDto } from "nestjs-zod";
+import {
+  AddToCartSchema,
+  UpdateCartItemSchema,
+} from "@repo/db/validators/cart.validator";
+
+export class AddToCartDto extends createZodDto(AddToCartSchema) {}
+export class UpdateCartItemDto extends createZodDto(UpdateCartItemSchema) {}
+```
+
+## 5.3 — `cart.types.ts`
+
+Type aliases inferred from `@repo/db/validators/cart.validator`:
+
+```ts
+import { z } from "zod";
+import {
+  CartSelectSchema,
+  CartItemSelectSchema,
+} from "@repo/db/validators/cart.validator";
+
+export type CartItemResponse = z.infer<typeof CartItemSelectSchema>;
+export type CartResponse = z.infer<typeof CartSelectSchema>;
+```
+
+## 5.4 — `cart.utils.ts`
+
+Two pure functions ported from `apps/api/src/routes/cart/cart-helpers.ts`:
+
+```ts
+export interface CartItemInput { ... }
+export interface CartInput { ... }
+export type StockCheckResult = { ok: true } | { ok: false; errorMessage: string };
+
+export const buildCartResponse = (cart: CartInput): CartResponse;
+export const checkStockAvailability = (
+  requestedQuantity: number,
+  stockQuantity: number,
+  existingQuantity?: number,
+): StockCheckResult;
+```
+
+## 5.5 — `cart.service.ts`
+
+`@Injectable()`, injects `ProductsService` for product existence + stock checks.
+
+| Method                        | Transaction | Throws                                                           | Notes                                                                                                  |
+| ----------------------------- | ----------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `getCart(userId)`             | —           | —                                                                | Get-or-create cart pattern. `buildCartResponse` with computed `subAmount`, `totalItems`, `totalAmount` |
+| `addItem(userId, dto)`        | ✅          | `NotFoundException`, `BadRequestException`                       | Validate product exists (via `ProductsService.getOne`). Upsert on duplicate. Stock check. Tx.          |
+| `updateItem(userId, id, dto)` | ✅          | `NotFoundException`, `ForbiddenException`, `BadRequestException` | Fetch cart item with details. Ownership check. Stock check on quantity increase. Tx.                   |
+| `deleteItem(userId, id)`      | ✅          | `NotFoundException`, `ForbiddenException`                        | Fetch cart item with details. Ownership check. Tx. Return empty cart response after delete.            |
+| `clearCart(userId)`           | ✅          | —                                                                | Get-or-create cart. Delete all items. Return empty cart response.                                      |
+
+### Ownership check
+
+```ts
+const cartItem = await db.query.cartItem.findFirst({
+  where: eq(cartItem.id, cartItemId),
+  with: { cart: true, product: true },
+});
+if (!cartItem) throw new NotFoundException("Cart item not found");
+if (cartItem.cart.userId !== userId)
+  throw new ForbiddenException("You can only modify items in your own cart");
+```
+
+### Stock check (on add + update)
+
+```ts
+const product = await this.productsService.getOne(productId);
+const existingItem = existingCart.cartItems.find(
+  (i) => i.productId === productId,
+);
+const totalRequested = quantity + (existingItem?.quantity ?? 0);
+const stockCheck = checkStockAvailability(
+  totalRequested,
+  product.stockQuantity ?? 0,
+  existingItem?.quantity ?? 0,
+);
+if (!stockCheck.ok) throw new BadRequestException(stockCheck.errorMessage);
+```
+
+## 5.6 — `cart.controller.ts`
+
+```ts
+@Controller("cart")
+export class CartController {
+  constructor(private cartService: CartService) {}
+}
+```
+
+5 routes, all require auth (no `@AllowAnonymous`). Uses `@UserHasPermission` already on main auth guard — cart routes just use the default session-authenticated state.
+
+| Method   | Path              | DTO                 | Handler              |
+| -------- | ----------------- | ------------------- | -------------------- |
+| `GET`    | `/cart`           | —                   | `service.getCart`    |
+| `POST`   | `/cart/items`     | `AddToCartDto`      | `service.addItem`    |
+| `PUT`    | `/cart/items/:id` | `UpdateCartItemDto` | `service.updateItem` |
+| `DELETE` | `/cart/items/:id` | — (UuidParamDto)    | `service.deleteItem` |
+| `DELETE` | `/cart`           | —                   | `service.clearCart`  |
+
+All return `SuccessRes<CartResponse>` via `successResponse()`.
+
+## 5.7 — `cart.module.ts`
+
+```ts
+import { Module } from "@nestjs/common";
+import { ProductsModule } from "../products/products.module";
+import { CartController } from "./cart.controller";
+import { CartService } from "./cart.service";
+
+@Module({
+  imports: [ProductsModule],
+  controllers: [CartController],
+  providers: [CartService],
+})
+export class CartModule {}
+```
+
+Imports `ProductsModule` so `CartService` can inject `ProductsService` for product existence + stock checks.
+
+## 5.8 — Update `apps/nest/src/app.module.ts`
+
+```diff
++import { CartModule } from "./cart/cart.module";
+...
+  imports: [
+    HealthModule,
+    AuthModule.forRoot({ auth, bodyParser: { rawBody: true } }),
+    UserModule,
+    CategoriesModule,
+    ProductsModule,
++   CartModule,
+  ],
+```

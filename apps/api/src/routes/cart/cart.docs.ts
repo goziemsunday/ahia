@@ -1,6 +1,6 @@
 import { describeRoute } from "hono-openapi";
 
-import { CartSelectSchema } from "@repo/db/validators/cart.validator";
+import { CartExtendedSchema } from "@repo/db/validators/cart.validator";
 
 import HttpStatusCodes from "@/lib/http-status-codes";
 import {
@@ -26,7 +26,7 @@ export const getUserCartDoc = describeRoute({
   responses: {
     [HttpStatusCodes.OK]: createSuccessResponse("Cart retrieved", {
       details: "Cart retrieved successfully",
-      dataSchema: CartSelectSchema,
+      dataSchema: CartExtendedSchema,
     }),
     [HttpStatusCodes.UNAUTHORIZED]: createGenericErrorResponse("Unauthorized", {
       code: "UNAUTHORIZED",
@@ -48,7 +48,7 @@ export const addToCartDoc = describeRoute({
   responses: {
     [HttpStatusCodes.OK]: createSuccessResponse("Product added to cart", {
       details: "Product added to cart successfully",
-      dataSchema: CartSelectSchema,
+      dataSchema: CartExtendedSchema,
     }),
     [HttpStatusCodes.BAD_REQUEST]: createErrorResponse("Invalid request data", {
       validationError: {
@@ -107,7 +107,7 @@ export const updateCartItemDoc = describeRoute({
   responses: {
     [HttpStatusCodes.OK]: createSuccessResponse("Cart item updated", {
       details: "Cart item updated successfully",
-      dataSchema: CartSelectSchema,
+      dataSchema: CartExtendedSchema,
     }),
     [HttpStatusCodes.BAD_REQUEST]: createErrorResponse("Invalid request data", {
       validationError: {
@@ -170,7 +170,7 @@ export const deleteCartItemDoc = describeRoute({
   responses: {
     [HttpStatusCodes.OK]: createSuccessResponse("Cart item deleted", {
       details: "Cart item removed successfully",
-      dataSchema: CartSelectSchema,
+      dataSchema: CartExtendedSchema,
     }),
     [HttpStatusCodes.BAD_REQUEST]: createErrorResponse("Invalid request data", {
       invalidUUID: {
@@ -211,7 +211,7 @@ export const clearCartDoc = describeRoute({
   responses: {
     [HttpStatusCodes.OK]: createSuccessResponse("Cart cleared", {
       details: "Cart cleared successfully",
-      dataSchema: CartSelectSchema,
+      dataSchema: CartExtendedSchema,
     }),
     [HttpStatusCodes.UNAUTHORIZED]: createGenericErrorResponse("Unauthorized", {
       code: "UNAUTHORIZED",

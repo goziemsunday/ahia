@@ -7,15 +7,26 @@ import { ProductSelectSchema } from "./product.validator";
 export const CartItemSelectSchema = createSelectSchema(cartItem).extend({
   createdAt: z.iso.datetime().transform((n) => new Date(n)),
   updatedAt: z.iso.datetime().transform((n) => new Date(n)),
-  product: ProductSelectSchema,
   quantity: z.int().min(1),
-  subAmount: z.string().regex(/^\d+(\.\d{2})?$/),
 });
 
 export const CartSelectSchema = createSelectSchema(cart).extend({
   createdAt: z.iso.datetime().transform((n) => new Date(n)),
   updatedAt: z.iso.datetime().transform((n) => new Date(n)),
-  cartItems: CartItemSelectSchema.array(),
+});
+
+export const CartItemExtendedSchema = createSelectSchema(cartItem).extend({
+  createdAt: z.iso.datetime().transform((n) => new Date(n)),
+  updatedAt: z.iso.datetime().transform((n) => new Date(n)),
+  product: ProductSelectSchema,
+  cart: CartSelectSchema,
+  quantity: z.int().min(1),
+});
+
+export const CartExtendedSchema = createSelectSchema(cart).extend({
+  createdAt: z.iso.datetime().transform((n) => new Date(n)),
+  updatedAt: z.iso.datetime().transform((n) => new Date(n)),
+  cartItems: CartItemExtendedSchema.array(),
   totalItems: z.int().nonnegative(),
   totalAmount: z.string().regex(/^\d+(\.\d{2})?$/),
 });
