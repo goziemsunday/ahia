@@ -1526,7 +1526,7 @@ export interface StatsOverview {
 }
 
 export interface MonthlyStat {
-  month: string;       // "2024-01"
+  month: string; // "2024-01"
   revenue: number;
   orders: number;
 }
@@ -1558,6 +1558,7 @@ async getOneOrder(id: string): Promise<OrderWithItems>;
 ```
 
 Implementation notes:
+
 - `getOrderStats()` — three `db.select({ count: count(), amount: sum(order.totalAmount) }).from(order).where(...)` queries with different time windows (`gte(order.createdAt, now - interval '24 hours')`, etc.)
 - `getMonthlyStats()` — `db.select({ month: sql<string>\`to_char(created_at, 'YYYY-MM')\`, revenue: sum(order.totalAmount), orders: count() }).from(order).groupBy(sql\`1\`).orderBy(sql\`1\`).limit(12)` — aggregates by month, last 12 months
 - `getAllOrders()` — `db.query.order.findMany()` with `with: { user: true, orderItems: { with: { product: true } } }`, pagination, `orderBy: desc(order.createdAt)`
@@ -1570,6 +1571,7 @@ async getCount(): Promise<number>;
 ```
 
 Implementation:
+
 ```ts
 async getCount(): Promise<number> {
   const result = await db.select({ count: count() }).from(product);
@@ -1591,15 +1593,15 @@ export class AdminService {
 }
 ```
 
-| Method | Data source | Notes |
-|---|---|---|
-| `getStats()` | `OrdersService.getOrderStats()`, `ProductsService.getCount()`, raw `db.select({ count: count() }).from(user)` | User count from raw DB (no UserService exists) |
-| `getMonthlyStats()` | `OrdersService.getMonthlyStats()` | Passthrough to OrdersService |
-| `getUsers(query)` | `AuthService.api.listUsers()` via Better Auth admin plugin | Paginated, with name/email filters |
-| `getUserById(id)` | `AuthService.api.getUser()` via Better Auth admin plugin | Single user |
-| `getOrders(page, limit)` | `OrdersService.getAllOrders()` | Passthrough |
-| `getOrderById(id)` | `OrdersService.getOneOrder()` | Passthrough |
-| `createUser(body)` | `AuthService.api.createUser()` | TBD — implement when needed |
+| Method                   | Data source                                                                                                   | Notes                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `getStats()`             | `OrdersService.getOrderStats()`, `ProductsService.getCount()`, raw `db.select({ count: count() }).from(user)` | User count from raw DB (no UserService exists) |
+| `getMonthlyStats()`      | `OrdersService.getMonthlyStats()`                                                                             | Passthrough to OrdersService                   |
+| `getUsers(query)`        | `AuthService.api.listUsers()` via Better Auth admin plugin                                                    | Paginated, with name/email filters             |
+| `getUserById(id)`        | `AuthService.api.getUser()` via Better Auth admin plugin                                                      | Single user                                    |
+| `getOrders(page, limit)` | `OrdersService.getAllOrders()`                                                                                | Passthrough                                    |
+| `getOrderById(id)`       | `OrdersService.getOneOrder()`                                                                                 | Passthrough                                    |
+| `createUser(body)`       | `AuthService.api.createUser()`                                                                                | TBD — implement when needed                    |
 
 The service keeps the orchestration thin — most logic lives in the respective domain services. Stats combines 3 calls in parallel:
 
@@ -1634,15 +1636,15 @@ export class AdminController {
 
 Class-level `@UserHasPermission` applies the minimum permissions to all 7 routes. The `POST /users` route layers an additional `@UserHasPermission({ permission: { user: ["create"] } })`.
 
-| Method | Path | DTO | Extra auth | Handler |
-|---|---|---|---|---|
-| `GET` | `/admin/stats` | — | — | `service.getStats()` |
-| `GET` | `/admin/stats/monthly` | — | — | `service.getMonthlyStats()` |
-| `GET` | `/admin/users` | `ListUsersQueryDto` | — | `service.getUsers(query)` |
-| `GET` | `/admin/users/:id` | `UuidParamDto` | — | `service.getUserById(id)` |
-| `POST` | `/admin/users` | *TBD* | `+ @UserHasPermission({ permission: { user: ["create"] } })` | `service.createUser(body)` |
-| `GET` | `/admin/orders` | `PaginationQueryDto` | — | `service.getOrders(page, limit)` |
-| `GET` | `/admin/orders/:id` | `UuidParamDto` | — | `service.getOrderById(id)` |
+| Method | Path                   | DTO                  | Extra auth                                                   | Handler                          |
+| ------ | ---------------------- | -------------------- | ------------------------------------------------------------ | -------------------------------- |
+| `GET`  | `/admin/stats`         | —                    | —                                                            | `service.getStats()`             |
+| `GET`  | `/admin/stats/monthly` | —                    | —                                                            | `service.getMonthlyStats()`      |
+| `GET`  | `/admin/users`         | `ListUsersQueryDto`  | —                                                            | `service.getUsers(query)`        |
+| `GET`  | `/admin/users/:id`     | `UuidParamDto`       | —                                                            | `service.getUserById(id)`        |
+| `POST` | `/admin/users`         | _TBD_                | `+ @UserHasPermission({ permission: { user: ["create"] } })` | `service.createUser(body)`       |
+| `GET`  | `/admin/orders`        | `PaginationQueryDto` | —                                                            | `service.getOrders(page, limit)` |
+| `GET`  | `/admin/orders/:id`    | `UuidParamDto`       | —                                                            | `service.getOrderById(id)`       |
 
 All return `SuccessRes<T>` via `successResponse()`. Paginated routes use `buildPagination()`.
 
@@ -1685,17 +1687,17 @@ Imports `OrdersModule` and `ProductsModule` so `AdminService` can inject `Orders
 
 ## 7.9 — File summary
 
-| File | Lines (est.) | Notes |
-|---|---|---|
-| `admin/dto.ts` | ~10 | Reuses `ListUsersQuerySchema` from validators |
-| `admin/types.ts` | ~15 | `StatsOverview`, `MonthlyStat` interfaces |
-| `admin/service.ts` | ~70 | Orchestration, parallel calls, passthroughs |
-| `admin/controller.ts` | ~80 | 7 routes, class-level + one method-level decorator |
-| `admin/module.ts` | ~10 | Standard module, imports Orders + Products |
-| **Service additions** | | |
-| `orders/orders.service.ts` | +60 | 4 new methods (stats, monthly, admin listing) |
-| `product/products.service.ts` | +6 | 1 new method (`getCount`) |
-| **Total new** | **~185** | |
+| File                          | Lines (est.) | Notes                                              |
+| ----------------------------- | ------------ | -------------------------------------------------- |
+| `admin/dto.ts`                | ~10          | Reuses `ListUsersQuerySchema` from validators      |
+| `admin/types.ts`              | ~15          | `StatsOverview`, `MonthlyStat` interfaces          |
+| `admin/service.ts`            | ~70          | Orchestration, parallel calls, passthroughs        |
+| `admin/controller.ts`         | ~80          | 7 routes, class-level + one method-level decorator |
+| `admin/module.ts`             | ~10          | Standard module, imports Orders + Products         |
+| **Service additions**         |              |                                                    |
+| `orders/orders.service.ts`    | +60          | 4 new methods (stats, monthly, admin listing)      |
+| `product/products.service.ts` | +6           | 1 new method (`getCount`)                          |
+| **Total new**                 | **~185**     |                                                    |
 
 ## 7.10 — Module export requirements
 
@@ -1709,9 +1711,13 @@ These are NestJS DI requirements — a provider must be exported by its module t
 
 ## 7.11 — Error mapping
 
-| Hono | NestJS |
-|---|---|
-| `{ error: { details } }` → 404 (user/order not found) | `NotFoundException` |
-| `{ error: { details } }` → 409 (duplicate) | `ConflictException` |
-| Unauthorized → 401 | Handled by `@thallesp/nestjs-better-auth` |
-| Forbidden (insufficient permissions) → 403 | Handled by `@UserHasPermission` |
+| Hono                                                  | NestJS                                       |
+| ----------------------------------------------------- | -------------------------------------------- |
+| `{ error: { details } }` → 404 (user/order not found) | `NotFoundException`                          |
+| `{ error: { details } }` → 409 (duplicate)            | `ConflictException`                          |
+| Unauthorized → 401                                    | Handled by `@thallesp/nestjs-better-auth`    |
+| Forbidden (insufficient permissions) → 403            | Handled by `@UserHasPermission`              |
+| Order not found → 404                                 | `NotFoundException("Order not found")`       |
+| Unauthorized → 401                                    | Handled by `@thallesp/nestjs-better-auth`    |
+| Ownership mismatch → 404                              | `NotFoundException("Order not found")`       |
+| Server error → 500                                    | Let propagate → global `HttpExceptionFilter` |

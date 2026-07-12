@@ -12,6 +12,7 @@ import { OrdersModule } from "./orders/orders.module";
 import { ProductsModule } from "./product/products.module";
 import { UserModule } from "./user/user.module";
 import { WebhookModule } from "./webhook/webhook.module";
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { WebhookModule } from "./webhook/webhook.module";
     CartModule,
     OrdersModule,
     WebhookModule,
+    AdminModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },
