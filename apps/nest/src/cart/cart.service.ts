@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 
 import { db, eq } from "@repo/db";
-import { cart, cartItem } from "@repo/db/schemas/cart.schema";
+import { Cart, cart, cartItem } from "@repo/db/schemas/cart.schema";
 
 import { ProductsService } from "../product/products.service";
 import { AddToCartDto, UpdateCartItemDto } from "./cart.dto";
@@ -31,16 +31,23 @@ export class CartService {
     });
 
     if (!userCart) {
-      const [newCart] = await db
-        .insert(cart)
-        .values({
-          userId,
-        })
-        .returning();
+      const newCart = await this.createCart(userId);
       userCart = { ...newCart, cartItems: [] };
     }
 
     return buildCartResponse(userCart);
+  }
+
+  // create cart for new user
+  async createCart(userId: string): Promise<Cart> {
+    const [newCart] = await db
+      .insert(cart)
+      .values({
+        userId,
+      })
+      .returning();
+
+    return newCart;
   }
 
   // get a single cart item

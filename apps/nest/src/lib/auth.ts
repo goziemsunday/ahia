@@ -4,9 +4,8 @@ import { admin as adminPlugin, bearer, openAPI } from "better-auth/plugins";
 
 import { db } from "@repo/db";
 import { ac, admin, superadmin, user as userRole } from "@repo/permissions";
-// import { createCartForUser } from "@/queries/cart-queries";
 
-// import { sendResetPasswordEmail, sendVerificationEmail } from "./email";
+import { sendResetPasswordEmail, sendVerificationEmail } from "./email";
 import env from "./env";
 
 export const auth = betterAuth({
@@ -17,24 +16,24 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
-    // sendResetPassword: async ({ user, token }) => {
-    //   await sendResetPasswordEmail({
-    //     to: user.email,
-    //     token,
-    //     name: user.name,
-    //   });
-    // },
+    sendResetPassword: async ({ user, token }) => {
+      await sendResetPasswordEmail({
+        to: user.email,
+        token,
+        name: user.name,
+      });
+    },
     revokeSessionsOnPasswordReset: true,
   },
   emailVerification: {
     sendOnSignUp: true,
-    // sendVerificationEmail: async ({ user, token }) => {
-    //   await sendVerificationEmail({
-    //     to: user.email,
-    //     name: user.name,
-    //     token,
-    //   });
-    // },
+    sendVerificationEmail: async ({ user, token }) => {
+      await sendVerificationEmail({
+        to: user.email,
+        name: user.name,
+        token,
+      });
+    },
   },
 
   socialProviders: {
@@ -51,13 +50,8 @@ export const auth = betterAuth({
   },
 
   databaseHooks: {
-    user: {
-      create: {
-        // after: async (user) => {
-        //   await createCartForUser(user.id);
-        // },
-      },
-    },
+    // an empty object has to be left here to ensure that the database hook
+    // providers registered in app.module.ts function properly
   },
 
   baseURL: env.API_URL,
