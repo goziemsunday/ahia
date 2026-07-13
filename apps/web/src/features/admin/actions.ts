@@ -7,7 +7,7 @@ import {
 import { UserSelectSchema } from "@repo/db/validators/user.validator";
 
 import { getAuthHeaders } from "@/lib/auth";
-import { $fetchAndThrow } from "@/lib/fetch";
+import { $apiFetchAndThrow } from "@/lib/fetch";
 import { successResSchema } from "@/lib/schemas";
 
 // ── Users ──────────────────────────────────────────────────
@@ -17,7 +17,7 @@ export const createAdminUser = async (body: {
   email: string;
   role: "user" | "admin";
 }) => {
-  const { data } = await $fetchAndThrow("/admin/users", {
+  const { data } = await $apiFetchAndThrow("/admin/users", {
     method: "POST",
     headers: await getAuthHeaders(),
     body,
@@ -30,7 +30,7 @@ export const createAdminUser = async (body: {
 // ── Categories ──────────────────────────────────────────────────
 
 export const createCategory = async (body: { name: string }) => {
-  const { data } = await $fetchAndThrow("/categories", {
+  const { data } = await $apiFetchAndThrow("/categories", {
     method: "POST",
     headers: await getAuthHeaders(),
     body,
@@ -47,7 +47,7 @@ export const updateCategory = async ({
   id: string;
   body: { name: string };
 }) => {
-  const { data } = await $fetchAndThrow(`/categories/${id}`, {
+  const { data } = await $apiFetchAndThrow(`/categories/${id}`, {
     method: "PUT",
     headers: await getAuthHeaders(),
     body,
@@ -58,7 +58,7 @@ export const updateCategory = async ({
 };
 
 export const deleteCategory = async (id: string) => {
-  const { data } = await $fetchAndThrow(`/categories/${id}`, {
+  const { data } = await $apiFetchAndThrow(`/categories/${id}`, {
     method: "DELETE",
     headers: await getAuthHeaders(),
     output: successResSchema(CategorySelectSchema),
@@ -97,7 +97,7 @@ export const createAdminProduct = async (input: CreateAdminProductInput) => {
     formData.append("images", image);
   }
 
-  const { data } = await $fetchAndThrow("/products", {
+  const { data } = await $apiFetchAndThrow("/products", {
     method: "POST",
     headers: await getAuthHeaders(),
     body: formData,
@@ -151,7 +151,7 @@ export const updateAdminProduct = async ({
     }
   }
 
-  const { data } = await $fetchAndThrow(`/products/${id}`, {
+  const { data } = await $apiFetchAndThrow(`/products/${id}`, {
     method: "PUT",
     headers: await getAuthHeaders(),
     body: formData,
@@ -162,7 +162,7 @@ export const updateAdminProduct = async ({
 };
 
 export const deleteProduct = async (id: string) => {
-  const { data } = await $fetchAndThrow(`/products/${id}`, {
+  const { data } = await $apiFetchAndThrow(`/products/${id}`, {
     method: "DELETE",
     headers: await getAuthHeaders(),
     output: successResSchema(ProductExtendedSchema),

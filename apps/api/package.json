@@ -4,7 +4,6 @@
   "type": "module",
   "scripts": {
     "build": "bun build --compile --minify src/index.ts --outfile api-exe",
-    "dev": "bun run --hot src/index.ts",
     "start": "./api-exe",
     "stripe": "stripe listen --forward-to localhost:8000/api/webhooks/stripe"
   },

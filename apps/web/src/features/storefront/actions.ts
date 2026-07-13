@@ -1,10 +1,10 @@
 "use server";
 
-import { CartSelectSchema } from "@repo/db/validators/cart.validator";
-
 import { getAuthHeaders } from "@/lib/auth";
-import { $fetchAndThrow } from "@/lib/fetch";
+import { $apiFetchAndThrow } from "@/lib/fetch";
 import { successResSchema } from "@/lib/schemas";
+
+import { CartResponseDataSchema } from "../cart/schema";
 
 // ── Add To Cart ──────────────────────────────────────────────
 
@@ -15,10 +15,10 @@ export const addToCart = async ({
   productId: string;
   quantity: number;
 }) => {
-  return await $fetchAndThrow("/cart/items", {
+  return await $apiFetchAndThrow("/cart/items", {
     method: "POST",
     headers: await getAuthHeaders(),
     body: { productId, quantity },
-    output: successResSchema(CartSelectSchema),
+    output: successResSchema(CartResponseDataSchema),
   });
 };

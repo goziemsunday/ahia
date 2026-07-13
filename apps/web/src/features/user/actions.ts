@@ -8,11 +8,11 @@ import {
 } from "@repo/db/validators/user.validator";
 
 import { getAuthHeaders } from "@/lib/auth";
-import { $fetchAndThrow } from "@/lib/fetch";
+import { $apiFetchAndThrow } from "@/lib/fetch";
 import { successResSchema } from "@/lib/schemas";
 
 export const updateUser = async (body: z.infer<typeof UserUpdateSchema>) => {
-  const { data: response } = await $fetchAndThrow("/user/me", {
+  const { data: response } = await $apiFetchAndThrow("/user/me", {
     method: "PATCH",
     headers: await getAuthHeaders(),
     body,
@@ -29,7 +29,7 @@ export const updateUser = async (body: z.infer<typeof UserUpdateSchema>) => {
 export const changePassword = async (
   body: z.infer<typeof ChangePasswordSchema>,
 ) => {
-  const { data: response } = await $fetchAndThrow("/user/me/password", {
+  const { data: response } = await $apiFetchAndThrow("/user/me/password", {
     method: "POST",
     headers: await getAuthHeaders(),
     body,

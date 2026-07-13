@@ -6,7 +6,7 @@ import {
   ProductExtendedSchema,
 } from "@repo/db/validators/product.validator";
 
-import { $fetch, $fetchAndThrow } from "@/lib/fetch";
+import { $apiFetchAndThrow, $fetch, $fetchAndThrow } from "@/lib/fetch";
 import { successResSchema } from "@/lib/schemas";
 
 // ── Single Product ───────────────────────────────────────────
@@ -193,7 +193,7 @@ export const searchProducts = async (query: string, limit?: number) => {
   const params: Record<string, string | number> = { q: query };
   if (limit) params.limit = limit;
 
-  const { data } = await $fetchAndThrow("/products/search", {
+  const { data } = await $apiFetchAndThrow("/products/search", {
     query: params,
     output: successResSchema(z.array(ProductExtendedSchema)),
   });

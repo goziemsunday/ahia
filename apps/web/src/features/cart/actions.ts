@@ -2,16 +2,17 @@
 
 import { z } from "zod";
 
-import { CartSelectSchema } from "@repo/db/validators/cart.validator";
 import { OrderSelectSchema } from "@repo/db/validators/order.validator";
 
 import { getAuthHeaders } from "@/lib/auth";
-import { $fetch, $fetchAndThrow } from "@/lib/fetch";
+import { $apiFetchAndThrow, $fetch } from "@/lib/fetch";
 import { successResSchema } from "@/lib/schemas";
 
-const cartOutputSchema = successResSchema(CartSelectSchema);
+import { CartResponseDataSchema } from "./schema";
 
-type CartResponse = z.infer<typeof CartSelectSchema>;
+const cartOutputSchema = successResSchema(CartResponseDataSchema);
+
+type CartResponse = z.infer<typeof CartResponseDataSchema>;
 
 export const getCart = async (): Promise<CartResponse | null> => {
   const { data, error } = await $fetch("/cart", {
@@ -34,7 +35,7 @@ export const updateCartItemQuantity = async ({
   itemId: string;
   quantity: number;
 }) => {
-  return await $fetchAndThrow(`/cart/items/${itemId}`, {
+  return await $apiFetchAndThrow(`/cart/items/${itemId}`, {
     method: "PUT",
     headers: await getAuthHeaders(),
     body: { quantity },
@@ -43,7 +44,7 @@ export const updateCartItemQuantity = async ({
 };
 
 export const removeCartItem = async (itemId: string) => {
-  return await $fetchAndThrow(`/cart/items/${itemId}`, {
+  return await $apiFetchAndThrow(`/cart/items/${itemId}`, {
     method: "DELETE",
     headers: await getAuthHeaders(),
     output: cartOutputSchema,
@@ -51,7 +52,7 @@ export const removeCartItem = async (itemId: string) => {
 };
 
 export const clearCart = async () => {
-  return await $fetchAndThrow("/cart", {
+  return await $apiFetchAndThrow("/cart", {
     method: "DELETE",
     headers: await getAuthHeaders(),
     output: cartOutputSchema,
@@ -59,7 +60,7 @@ export const clearCart = async () => {
 };
 
 export const createCheckout = async () => {
-  return await $fetchAndThrow("/orders/create-checkout", {
+  return await $apiFetchAndThrow("/orders/create-checkout", {
     method: "POST",
     headers: await getAuthHeaders(),
     output: successResSchema(
@@ -72,7 +73,7 @@ export const createCheckout = async () => {
 };
 
 export const verifyCheckoutSession = async (sessionId: string) => {
-  return await $fetchAndThrow("/orders/verify-session", {
+  return await $apiFetchAndThrow("/orders/verify-session", {
     method: "POST",
     headers: await getAuthHeaders(),
     body: { sessionId },
