@@ -1,5 +1,6 @@
-import { Module } from "@nestjs/common";
-import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
+import { Module, type ExecutionContext } from "@nestjs/common";
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
+import { ThrottlerModule } from "@nestjs/throttler";
 import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { ZodSerializerInterceptor, ZodValidationPipe } from "nestjs-zod";
 
@@ -7,6 +8,7 @@ import { AdminModule } from "./admin/admin.module";
 import { CartModule } from "./cart/cart.module";
 import { CategoriesModule } from "./category/categories.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
+import { ThrottlerBehindProxyGuard } from "./common/guards/throttler-behind-proxy.guard";
 import { UserCreateHook } from "./db.hook";
 import { HealthModule } from "./health/health.module";
 import { auth } from "./lib/auth";
@@ -18,6 +20,30 @@ import { WebhookModule } from "./webhook/webhook.module";
 @Module({
   imports: [
     HealthModule,
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          name: "auth",
+          ttl: 60000,
+          limit: 100,
+          skipIf: (ctx: ExecutionContext) =>
+            !ctx
+              .switchToHttp()
+              .getRequest<Request>()
+              .url.startsWith("/api/auth"),
+        },
+        {
+          name: "api",
+          ttl: 60000,
+          limit: 1000,
+          skipIf: (ctx: ExecutionContext) =>
+            ctx
+              .switchToHttp()
+              .getRequest<Request>()
+              .url.startsWith("/api/auth"),
+        },
+      ],
+    }),
     AuthModule.forRoot({
       auth,
       bodyParser: { rawBody: true },
@@ -34,6 +60,7 @@ import { WebhookModule } from "./webhook/webhook.module";
     UserCreateHook,
     { provide: APP_PIPE, useClass: ZodValidationPipe },
     { provide: APP_INTERCEPTOR, useClass: ZodSerializerInterceptor },
+    { provide: APP_GUARD, useClass: ThrottlerBehindProxyGuard },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
   ],
 })

@@ -1,4 +1,5 @@
 import { NestFactory } from "@nestjs/core";
+import { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { apiReference } from "@scalar/nestjs-api-reference";
 import "dotenv/config";
@@ -7,7 +8,7 @@ import { AppModule } from "./app.module";
 import env from "./lib/env";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     // We're using the `@thallesp/nestjs-better-auth` package which disables
     // NestJS's built-in body parser, therefore the `rawBody: true` option in
     // `NestFactory.create()` has no effect. To regain access to req.rawBody
@@ -20,6 +21,7 @@ async function bootstrap() {
     ? env.CORS_ORIGINS.split(",").map((origin) => origin.trim())
     : env.WEB_URL;
 
+  app.set("trust proxy", "loopback");
   app.setGlobalPrefix("api");
   app.enableCors({ origin: corsOrigins, credentials: true });
 
