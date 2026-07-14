@@ -15,7 +15,7 @@ Ahia provides a complete e-commerce experience:
 
 ## Stack
 
-**Backend:** Hono on Bun for the API, Better Auth for auth, and PostgreSQL + Drizzle for data.
+**Backend:** NestJS for the API, Better Auth for auth, and PostgreSQL + Drizzle for data.
 
 **Frontend:** Next.js with React 19, TanStack React Query for server state, React Form + React Table for forms and tables, and Tailwind for styling.
 
@@ -43,7 +43,7 @@ bun install
 Each app has its own `.env.example` file. Copy them to create `.env` files:
 
 ```bash
-cp apps/api/.env.example apps/api/.env
+cp apps/nest/.env.example apps/nest/.env
 cp apps/web/.env.example apps/web/.env
 cp packages/db/.env.example packages/db/.env
 ```
@@ -66,9 +66,9 @@ turbo run dev
 
 This starts all services concurrently:
 
-- API: `http://localhost:8000`
+- API: `http://localhost:5000`
 - Web: `http://localhost:3000`
-- API Docs: `http://localhost:8000/api/reference`
+- API Docs: `http://localhost:5000/api/reference`
 
 ### 5. Build for Production
 

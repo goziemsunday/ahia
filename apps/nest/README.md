@@ -11,6 +11,6 @@ Backend API for the Ahia application built with NestJS.
 
 1. Copy `.env.example` to `.env` and configure environment variables.
 2. Run `bun install` to install dependencies.
-3. Run `turbo dev` from the project root to start the API.
+3. Run \`turbo run dev\` from the project root to start the API.
 
 See the main project [`README.md`](https://github.com/chiagxziem/ahia) for more detailed.
