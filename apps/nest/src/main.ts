@@ -5,6 +5,7 @@ import { apiReference } from "@scalar/nestjs-api-reference";
 import compression from "compression";
 import "dotenv/config";
 import helmet from "helmet";
+import morgan from "morgan";
 
 import { AppModule } from "./app.module";
 import env from "./lib/env";
@@ -37,6 +38,7 @@ async function bootstrap() {
     }),
   );
   app.use(compression());
+  app.use(morgan("dev"));
   app.setGlobalPrefix("api");
   app.enableCors({ origin: corsOrigins, credentials: true });
 
