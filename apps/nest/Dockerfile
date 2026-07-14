@@ -15,7 +15,10 @@ FROM base AS builder
 WORKDIR /app
 
 COPY --from=prepare /app/out/json/ .
-RUN bun install
+COPY --from=prepare /app/out/full/packages ./packages
+# hoisted linker: flattens all deps into root node_modules/ so a single COPY
+# captures everything for the runner, keeping the image small and simple
+RUN bun install --linker=hoisted
 
 COPY --from=prepare /app/out/full/ .
 
@@ -34,6 +37,9 @@ COPY --from=builder /app/apps/nest/dist ./dist
 COPY --from=builder /app/migrate-exe ./migrate-exe
 COPY --from=builder /app/packages/db/src/migrations ./migrations
 COPY --from=builder /app/node_modules ./node_modules
+# hoisted linker symlinks @repo/* packages into node_modules — copy their
+# source to the runner so those symlinks resolve at runtime
+COPY --from=builder /app/packages ./packages
 
 USER bun
 EXPOSE 5000
