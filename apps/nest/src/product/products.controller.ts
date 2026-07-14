@@ -12,6 +12,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   AllowAnonymous,
   Session,
@@ -19,28 +20,50 @@ import {
   type UserSession,
 } from "@thallesp/nestjs-better-auth";
 
+import { ApiErrors } from "../common/decorators/api-error-res.decorator";
+import {
+  ApiCreatedRes,
+  ApiSuccessRes,
+  ApiSuccessResPaginated,
+} from "../common/decorators/api-success-res.decorator";
 import {
   LimitQueryDto,
   PaginationQueryDto,
   SearchQueryDto,
   UuidParamDto,
 } from "../common/dto/shared.dto";
-import { SuccessRes } from "../lib/types";
+import type { SuccessRes } from "../lib/types";
 import { buildPagination, successResponse } from "../lib/utils";
 import { productImageValidators } from "./product.validators";
 import {
   CreateProductDto,
+  CreateProductUploadDto,
+  ProductWithRelationsDto,
   ShopQueryDto,
   UpdateProductDto,
+  UpdateProductUploadDto,
 } from "./products.dto";
 import { ProductsService } from "./products.service";
-import { ProductWithRelations } from "./products.types";
+import type { ProductWithRelations } from "./products.types";
 
 @Controller("products")
+@ApiTags("Products")
 export class ProductsController {
   constructor(private productsService: ProductsService) {}
 
   @Get()
+  @ApiOperation({ description: "Get all products" })
+  @ApiSuccessResPaginated({
+    model: ProductWithRelationsDto,
+    isArray: true,
+    description: "All products with relations (categories, creator)",
+  })
+  @ApiErrors({
+    400: {
+      description: "Invalid pagination parameters",
+      example: { error: { details: "page: Expected number, received NaN" } },
+    },
+  })
   @AllowAnonymous()
   async getAll(
     @Query() query: PaginationQueryDto,
@@ -55,6 +78,17 @@ export class ProductsController {
   }
 
   @Get("featured")
+  @ApiOperation({ description: "Get the featured product" })
+  @ApiSuccessRes({
+    model: ProductWithRelationsDto,
+    description: "Featured product",
+  })
+  @ApiErrors({
+    404: {
+      description: "No products exist yet",
+      example: { error: { details: "Product not found" } },
+    },
+  })
   @AllowAnonymous()
   async getFeatured(): Promise<SuccessRes<ProductWithRelations>> {
     const featuredProduct = await this.productsService.getFeatured();
@@ -62,6 +96,22 @@ export class ProductsController {
   }
 
   @Get("latest")
+  @ApiOperation({ description: "Get the latest products" })
+  @ApiSuccessRes({
+    model: ProductWithRelationsDto,
+    isArray: true,
+    description: "Latest products",
+  })
+  @ApiErrors({
+    400: {
+      description: "Invalid limit parameter",
+      example: { error: { details: "limit: Expected number, received NaN" } },
+    },
+    404: {
+      description: "No latest products found",
+      example: { error: { details: "Latest products not found" } },
+    },
+  })
   @AllowAnonymous()
   async getLatest(
     @Query() query: LimitQueryDto,
@@ -71,6 +121,18 @@ export class ProductsController {
   }
 
   @Get("trending")
+  @ApiOperation({ description: "Get trending products ranked by units sold in the last 30 days" })
+  @ApiSuccessRes({
+    model: ProductWithRelationsDto,
+    isArray: true,
+    description: "Trending products",
+  })
+  @ApiErrors({
+    400: {
+      description: "Invalid limit parameter",
+      example: { error: { details: "limit: Expected number, received NaN" } },
+    },
+  })
   @AllowAnonymous()
   async getTrending(
     @Query() query: LimitQueryDto,
@@ -82,6 +144,23 @@ export class ProductsController {
   }
 
   @Get("shop")
+  @ApiOperation({ description: "Get products with filtering, sorting, and pagination" })
+  @ApiSuccessResPaginated({
+    model: ProductWithRelationsDto,
+    isArray: true,
+    description: "Shop products with filtering, sorting, and pagination",
+  })
+  @ApiErrors({
+    400: {
+      description: "Invalid shop query parameters",
+      example: {
+        error: {
+          details:
+            "page: Expected number, received NaN; maxPrice: Expected number, received string",
+        },
+      },
+    },
+  })
   @AllowAnonymous()
   async getShop(
     @Query() query: ShopQueryDto,
@@ -94,6 +173,18 @@ export class ProductsController {
   }
 
   @Get("search")
+  @ApiOperation({ description: "Search products by name" })
+  @ApiSuccessRes({
+    model: ProductWithRelationsDto,
+    isArray: true,
+    description: "Search products by query string",
+  })
+  @ApiErrors({
+    400: {
+      description: "Invalid search query",
+      example: { error: { details: "q: Required" } },
+    },
+  })
   @AllowAnonymous()
   async search(
     @Query() query: SearchQueryDto,
@@ -106,6 +197,21 @@ export class ProductsController {
   }
 
   @Get(":id")
+  @ApiOperation({ description: "Get a product" })
+  @ApiSuccessRes({
+    model: ProductWithRelationsDto,
+    description: "A single product by ID with its relations",
+  })
+  @ApiErrors({
+    400: {
+      description: "Invalid UUID parameter",
+      example: { error: { details: "id: Invalid uuid" } },
+    },
+    404: {
+      description: "Product not found",
+      example: { error: { details: "Product not found" } },
+    },
+  })
   @AllowAnonymous()
   async getOne(
     @Param() param: UuidParamDto,
@@ -115,6 +221,28 @@ export class ProductsController {
   }
 
   @Post()
+  @ApiOperation({ description: "Create a new product" })
+  @ApiBearerAuth()
+  @ApiCreatedRes({
+    model: ProductWithRelationsDto,
+    description: "Product created",
+  })
+  @ApiErrors({
+    400: {
+      description:
+        "Invalid input: validation, missing image, or invalid fields",
+      example: {
+        error: {
+          details:
+            "name: Required; price: Price must be a positive number; At least 1 image is required",
+        },
+      },
+    },
+    401: { description: "Not authenticated: no or invalid session" },
+    403: { description: "Insufficient permissions to create products" },
+  })
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({ type: CreateProductUploadDto })
   @UseInterceptors(FilesInterceptor("images", 3))
   @UserHasPermission({ permission: { product: ["create"] } })
   async create(
@@ -132,6 +260,31 @@ export class ProductsController {
   }
 
   @Put(":id")
+  @ApiOperation({ description: "Update an existing product" })
+  @ApiBearerAuth()
+  @ApiSuccessRes({
+    model: ProductWithRelationsDto,
+    description: "Product updated",
+  })
+  @ApiErrors({
+    400: {
+      description: "Invalid input: validation, image issues, or invalid fields",
+      example: {
+        error: {
+          details:
+            "id: Invalid uuid; sizes: names must be unique (case-insensitive); At least 1 image is required",
+        },
+      },
+    },
+    401: { description: "Not authenticated: no or invalid session" },
+    403: { description: "Insufficient permissions to update products" },
+    404: {
+      description: "Product not found",
+      example: { error: { details: "Product not found" } },
+    },
+  })
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({ type: UpdateProductUploadDto })
   @UseInterceptors(FilesInterceptor("images", 3))
   @UserHasPermission({ permission: { product: ["update"] } })
   async update(
@@ -154,6 +307,33 @@ export class ProductsController {
   }
 
   @Delete(":id")
+  @ApiOperation({ description: "Delete a product" })
+  @ApiBearerAuth()
+  @ApiSuccessRes({
+    model: ProductWithRelationsDto,
+    description: "Product deleted",
+  })
+  @ApiErrors({
+    400: {
+      description: "Invalid UUID parameter",
+      example: { error: { details: "id: Invalid uuid" } },
+    },
+    401: { description: "Not authenticated: no or invalid session" },
+    403: { description: "Insufficient permissions to delete products" },
+    404: {
+      description: "Product not found",
+      example: { error: { details: "Product not found" } },
+    },
+    409: {
+      description: "Product has dependencies: exists in carts or orders",
+      example: {
+        error: {
+          details:
+            "Product cannot be deleted as it exists in user carts and orders",
+        },
+      },
+    },
+  })
   @UserHasPermission({ permission: { product: ["delete"] } })
   async delete(
     @Param() param: UuidParamDto,

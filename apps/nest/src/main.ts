@@ -1,4 +1,6 @@
 import { NestFactory } from "@nestjs/core";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { apiReference } from "@scalar/nestjs-api-reference";
 import "dotenv/config";
 
 import { AppModule } from "./app.module";
@@ -20,6 +22,39 @@ async function bootstrap() {
 
   app.setGlobalPrefix("api");
   app.enableCors({ origin: corsOrigins, credentials: true });
+
+  const config = new DocumentBuilder()
+    .setTitle("Ahia API")
+    .setDescription("The API for Ahia, an eCommerce site.")
+    .setVersion("0.0.1")
+    .addBearerAuth()
+    .build();
+
+  const documentFactory = () => SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup("", app, documentFactory, {
+    jsonDocumentUrl: "api/doc",
+    ui: false,
+  });
+
+  app.use(
+    "/api/reference",
+    apiReference({
+      url: "/api/doc",
+      authentication: {
+        preferredSecurityScheme: "bearerAuth",
+        securitySchemes: {
+          bearerAuth: { token: "" },
+        },
+      },
+      persistAuth: true,
+      pageTitle: "Ahia API",
+      theme: "saturn",
+      defaultHttpClient: {
+        targetKey: "js",
+        clientKey: "axios",
+      },
+    }),
+  );
 
   await app.listen(5000);
 }

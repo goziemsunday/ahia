@@ -1,6 +1,9 @@
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 
+import { ProductExtendedSchema } from "@repo/db/validators/product.validator";
+import { ApiProperty } from "@nestjs/swagger";
+
 export const ShopQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().default(50),
@@ -80,3 +83,72 @@ export class UpdateProductDto extends createZodDto(
       .describe(`JSON array of image keys to keep`),
   }),
 ) {}
+
+// response dtos
+export class ProductWithRelationsDto extends createZodDto(
+  ProductExtendedSchema,
+) {}
+
+export class CreateProductUploadDto {
+  @ApiProperty({ type: "string" })
+  name!: string;
+
+  @ApiProperty({ type: "string", required: false })
+  description?: string;
+
+  @ApiProperty({ type: "string" })
+  price!: string;
+
+  @ApiProperty({ type: "string" })
+  stockQuantity!: string;
+
+  @ApiProperty({ type: "string", required: false })
+  sizes?: string;
+
+  @ApiProperty({ type: "string", required: false })
+  colors?: string;
+
+  @ApiProperty({ type: "string", required: false })
+  categoryIds?: string;
+
+  @ApiProperty({
+    type: "array",
+    items: { type: "string", format: "binary" },
+    maxItems: 3,
+  })
+  images!: any[];
+}
+
+export class UpdateProductUploadDto {
+  @ApiProperty({ type: "string", required: false })
+  name?: string;
+
+  @ApiProperty({ type: "string", required: false })
+  description?: string;
+
+  @ApiProperty({ type: "string", required: false })
+  price?: string;
+
+  @ApiProperty({ type: "string", required: false })
+  stockQuantity?: string;
+
+  @ApiProperty({ type: "string", required: false })
+  sizes?: string;
+
+  @ApiProperty({ type: "string", required: false })
+  colors?: string;
+
+  @ApiProperty({ type: "string", required: false })
+  categoryIds?: string;
+
+  @ApiProperty({ type: "string", required: false, description: "JSON array of image keys to keep" })
+  keepImageKeys?: string;
+
+  @ApiProperty({
+    type: "array",
+    items: { type: "string", format: "binary" },
+    maxItems: 3,
+    required: false,
+  })
+  images?: any[];
+}
