@@ -14,6 +14,7 @@ import { HealthModule } from "./health/health.module";
 import { auth } from "./lib/auth";
 import { OrdersModule } from "./orders/orders.module";
 import { ProductsModule } from "./product/products.module";
+import { SuperadminBootstrapper } from "./superadmin.init";
 import { UserModule } from "./user/user.module";
 import { WebhookModule } from "./webhook/webhook.module";
 
@@ -58,6 +59,7 @@ import { WebhookModule } from "./webhook/webhook.module";
   ],
   providers: [
     UserCreateHook,
+    SuperadminBootstrapper,
     { provide: APP_PIPE, useClass: ZodValidationPipe },
     { provide: APP_INTERCEPTOR, useClass: ZodSerializerInterceptor },
     { provide: APP_GUARD, useClass: ThrottlerBehindProxyGuard },
