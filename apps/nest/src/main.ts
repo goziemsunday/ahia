@@ -2,7 +2,9 @@ import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { apiReference } from "@scalar/nestjs-api-reference";
+import compression from "compression";
 import "dotenv/config";
+import helmet from "helmet";
 
 import { AppModule } from "./app.module";
 import env from "./lib/env";
@@ -22,22 +24,36 @@ async function bootstrap() {
     : env.WEB_URL;
 
   app.set("trust proxy", "loopback");
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+      frameguard: { action: "deny" },
+      hsts:
+        env.NODE_ENV === "production"
+          ? { maxAge: 31536000, includeSubDomains: true, preload: true }
+          : false,
+      referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+    }),
+  );
+  app.use(compression());
   app.setGlobalPrefix("api");
   app.enableCors({ origin: corsOrigins, credentials: true });
 
+  // OpenAPI
   const config = new DocumentBuilder()
     .setTitle("Ahia API")
     .setDescription("The API for Ahia, an eCommerce site.")
     .setVersion("0.0.1")
     .addBearerAuth()
     .build();
-
   const documentFactory = () => SwaggerModule.createDocument(app, config);
   SwaggerModule.setup("", app, documentFactory, {
     jsonDocumentUrl: "api/doc",
     ui: false,
   });
 
+  // Scalar
   app.use(
     "/api/reference",
     apiReference({
