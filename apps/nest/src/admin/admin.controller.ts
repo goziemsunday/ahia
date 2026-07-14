@@ -61,7 +61,9 @@ export class AdminController {
   }
 
   @Get("stats/monthly")
-  @ApiOperation({ description: "Get monthly aggregated stats for the last 12 months" })
+  @ApiOperation({
+    description: "Get monthly aggregated stats for the last 12 months",
+  })
   @ApiSuccessRes({
     model: MonthlyStatsDto,
     isArray: true,

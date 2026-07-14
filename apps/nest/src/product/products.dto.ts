@@ -1,8 +1,8 @@
+import { ApiProperty } from "@nestjs/swagger";
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 
 import { ProductExtendedSchema } from "@repo/db/validators/product.validator";
-import { ApiProperty } from "@nestjs/swagger";
 
 export const ShopQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -141,7 +141,11 @@ export class UpdateProductUploadDto {
   @ApiProperty({ type: "string", required: false })
   categoryIds?: string;
 
-  @ApiProperty({ type: "string", required: false, description: "JSON array of image keys to keep" })
+  @ApiProperty({
+    type: "string",
+    required: false,
+    description: "JSON array of image keys to keep",
+  })
   keepImageKeys?: string;
 
   @ApiProperty({

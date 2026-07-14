@@ -12,7 +12,13 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from "@nestjs/swagger";
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from "@nestjs/swagger";
 import {
   AllowAnonymous,
   Session,
@@ -121,7 +127,10 @@ export class ProductsController {
   }
 
   @Get("trending")
-  @ApiOperation({ description: "Get trending products ranked by units sold in the last 30 days" })
+  @ApiOperation({
+    description:
+      "Get trending products ranked by units sold in the last 30 days",
+  })
   @ApiSuccessRes({
     model: ProductWithRelationsDto,
     isArray: true,
@@ -144,7 +153,9 @@ export class ProductsController {
   }
 
   @Get("shop")
-  @ApiOperation({ description: "Get products with filtering, sorting, and pagination" })
+  @ApiOperation({
+    description: "Get products with filtering, sorting, and pagination",
+  })
   @ApiSuccessResPaginated({
     model: ProductWithRelationsDto,
     isArray: true,

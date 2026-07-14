@@ -38,7 +38,7 @@ export async function $apiFetchAndThrow<
     : T
 > {
   try {
-    return await $fetchAndThrow(url as any, options as any) as any;
+    return (await $fetchAndThrow(url as any, options as any)) as any;
   } catch (err) {
     if (err instanceof BetterFetchError) {
       const parsed = errorResSchema.safeParse(err.error);

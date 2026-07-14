@@ -82,7 +82,9 @@ export class OrdersController {
   }
 
   @Post("create-checkout")
-  @ApiOperation({ description: "Create a Stripe checkout session for the user's cart" })
+  @ApiOperation({
+    description: "Create a Stripe checkout session for the user's cart",
+  })
   @ApiCreatedRes({
     model: CheckoutResponseDto,
     description: "Stripe checkout session created",
@@ -121,7 +123,9 @@ export class OrdersController {
   }
 
   @Post("verify-session")
-  @ApiOperation({ description: "Verify a Stripe checkout session and update order status" })
+  @ApiOperation({
+    description: "Verify a Stripe checkout session and update order status",
+  })
   @ApiCreatedRes({
     model: OrderWithItemsDto,
     description: "Stripe session verified",

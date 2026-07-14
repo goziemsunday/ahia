@@ -7,7 +7,7 @@ import {
   type ApiResponseOptions,
 } from "@nestjs/swagger";
 
-type ApiSuccessResOptions<TModel extends Type<any>> = {
+type ApiSuccessResOptions<TModel extends Type> = {
   model: TModel;
   isArray?: boolean;
   description?: string;
@@ -50,7 +50,7 @@ const buildPaginatedSchema = (model: Type, isArray: boolean) => ({
   },
 });
 
-const buildOptions = <TModel extends Type<any>>(
+const buildOptions = <TModel extends Type>(
   schema: ReturnType<typeof buildDataSchema>,
   opts: ApiSuccessResOptions<TModel>,
 ): ApiResponseOptions => ({
@@ -66,7 +66,7 @@ const buildOptions = <TModel extends Type<any>>(
 
 // OK
 
-export const ApiSuccessRes = <TModel extends Type<any>>(
+export const ApiSuccessRes = <TModel extends Type>(
   opts: ApiSuccessResOptions<TModel>,
 ) =>
   applyDecorators(
@@ -76,7 +76,7 @@ export const ApiSuccessRes = <TModel extends Type<any>>(
     ),
   );
 
-export const ApiSuccessResPaginated = <TModel extends Type<any>>(
+export const ApiSuccessResPaginated = <TModel extends Type>(
   opts: ApiSuccessResOptions<TModel>,
 ) =>
   applyDecorators(
@@ -91,7 +91,7 @@ export const ApiSuccessResPaginated = <TModel extends Type<any>>(
 
 // CREATED
 
-export const ApiCreatedRes = <TModel extends Type<any>>(
+export const ApiCreatedRes = <TModel extends Type>(
   opts: ApiSuccessResOptions<TModel>,
 ) =>
   applyDecorators(
@@ -101,7 +101,7 @@ export const ApiCreatedRes = <TModel extends Type<any>>(
     ),
   );
 
-export const ApiCreatedResPaginated = <TModel extends Type<any>>(
+export const ApiCreatedResPaginated = <TModel extends Type>(
   opts: ApiSuccessResOptions<TModel>,
 ) =>
   applyDecorators(

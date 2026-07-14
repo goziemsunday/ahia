@@ -1,12 +1,11 @@
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 
-import { ProductSelectSchema } from "@repo/db/validators/product.validator";
-
 import {
   AddToCartSchema,
   UpdateCartItemSchema,
 } from "@repo/db/validators/cart.validator";
+import { ProductSelectSchema } from "@repo/db/validators/product.validator";
 
 // request dtos
 export class AddToCartDto extends createZodDto(AddToCartSchema) {}
