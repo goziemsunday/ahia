@@ -33,7 +33,7 @@ ENV NODE_ENV=production \
     HOSTNAME="0.0.0.0" \
     PORT=5000
 
-COPY --from=builder /app/apps/nest/dist ./dist
+COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/migrate-exe ./migrate-exe
 COPY --from=builder /app/packages/db/src/migrations ./migrations
 COPY --from=builder /app/node_modules ./node_modules
