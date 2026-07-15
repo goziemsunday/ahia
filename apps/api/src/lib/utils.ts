@@ -1,13 +1,11 @@
 /**
  * Helper function to create a success response for API routes.
  * @param data - The data to include in the response.
- * @param details - Additional details about the response.
- * @param pagination - Optional pagination information to include in the response.
+ * @param pagination - Optional pagination info to include in the repsonse.
  * @returns An object representing the success response.
  */
-export const successResponse = <TData, TDetails extends string>(
+export const successResponse = <TData>(
   data: TData,
-  details: TDetails,
   pagination?: {
     page: number;
     limit: number;
@@ -16,10 +14,21 @@ export const successResponse = <TData, TDetails extends string>(
   },
 ) => {
   return {
-    status: "success" as const,
-    details,
     data,
     ...(pagination ? { pagination } : {}),
+  };
+};
+
+/**
+ * Helper function to create an error response for API routes.
+ * @param errorDetails - Error message.
+ * @returns An object representing the error response.
+ */
+export const errorResponse = (errorDetails: string) => {
+  return {
+    error: {
+      details: errorDetails,
+    },
   };
 };
 
@@ -39,28 +48,6 @@ export const buildPagination = (
     limit,
     total,
     totalPages: Math.ceil(total / limit),
-  };
-};
-
-/**
- * Helper function to create an error response for API routes.
- * @param code - The error code.
- * @param details - Additional details about the error.
- * @param fields - Optional fields to include in the error response.
- * @returns An object representing the error response.
- */
-export const errorResponse = (
-  code: string,
-  details: string,
-  fields?: Record<string, string>,
-) => {
-  return {
-    status: "error",
-    error: {
-      code,
-      details,
-      fields: fields ?? {},
-    },
   };
 };
 

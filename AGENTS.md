@@ -4,7 +4,7 @@
 
 Full-stack e-commerce monorepo: Turborepo + Bun workspaces.
 
-- `apps/nest` (`@repo/nest`) — NestJS 11 API, port 5000
+- `apps/api` (`@repo/nest`) — NestJS 11 API, port 5000
 - `apps/web` (`@repo/web`) — Next.js 16 / React 19, port 3000
 - `packages/db` (`@repo/db`) — Drizzle ORM + PostgreSQL
 - `packages/permissions` (`@repo/permissions`) — Better Auth RBAC roles
@@ -60,7 +60,7 @@ turbo run db:delete     # stop DB container + delete volumes
 
 Three `.env` files required — copy from `.env.example`:
 
-- `apps/nest/.env`
+- `apps/api/.env`
 - `apps/web/.env`
 - `packages/db/.env`
 

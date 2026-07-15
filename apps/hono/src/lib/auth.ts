@@ -5,6 +5,8 @@ import { admin as adminPlugin, bearer, openAPI } from "better-auth/plugins";
 import { db } from "@repo/db";
 import { ac, admin, superadmin, user as userRole } from "@repo/permissions";
 
+import { createCartForUser } from "@/queries/cart-queries";
+
 import { sendResetPasswordEmail, sendVerificationEmail } from "./email";
 import env from "./env";
 
@@ -17,7 +19,7 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: true,
     sendResetPassword: async ({ user, token }) => {
-      void sendResetPasswordEmail({
+      await sendResetPasswordEmail({
         to: user.email,
         token,
         name: user.name,
@@ -27,9 +29,8 @@ export const auth = betterAuth({
   },
   emailVerification: {
     sendOnSignUp: true,
-    sendOnSignIn: true,
     sendVerificationEmail: async ({ user, token }) => {
-      void sendVerificationEmail({
+      await sendVerificationEmail({
         to: user.email,
         name: user.name,
         token,
@@ -39,8 +40,8 @@ export const auth = betterAuth({
 
   socialProviders: {
     google: {
-      clientId: env.GOOGLE_CLIENT_ID,
-      clientSecret: env.GOOGLE_CLIENT_SECRET,
+      clientId: env.GOOGLE_CLIENT_ID!,
+      clientSecret: env.GOOGLE_CLIENT_SECRET!,
     },
   },
 
@@ -51,12 +52,17 @@ export const auth = betterAuth({
   },
 
   databaseHooks: {
-    // an empty object has to be left here to ensure that the database hook
-    // providers registered in app.module.ts function properly
+    user: {
+      create: {
+        after: async (user) => {
+          await createCartForUser(user.id);
+        },
+      },
+    },
   },
 
   baseURL: env.API_URL,
-  trustedOrigins: [env.WEB_URL, env.API_URL],
+  trustedOrigins: [env.WEB_URL!, env.API_URL!],
 
   session: {
     expiresIn: 60 * 60 * 24 * 30,

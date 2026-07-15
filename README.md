@@ -43,7 +43,7 @@ bun install
 Each app has its own `.env.example` file. Copy them to create `.env` files:
 
 ```bash
-cp apps/nest/.env.example apps/nest/.env
+cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env
 cp packages/db/.env.example packages/db/.env
 ```

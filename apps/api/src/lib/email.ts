@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 
-import { buildOrderReceiptHtml } from "@/emails/order-receipt";
-import env from "@/lib/env";
+import { buildOrderReceiptHtml } from "../emails/order-receipt";
+import env from "./env";
 
 const resend = new Resend(env.RESEND_API_KEY);
 const from = `Ahia <ahia@${env.RESEND_DOMAIN}>`;
