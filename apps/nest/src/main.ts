@@ -20,10 +20,6 @@ async function bootstrap() {
     bodyParser: false,
   });
 
-  const corsOrigins = env.CORS_ORIGINS
-    ? env.CORS_ORIGINS.split(",").map((origin) => origin.trim())
-    : env.WEB_URL;
-
   app.set("trust proxy", "loopback");
   app.use(
     helmet({
@@ -40,7 +36,11 @@ async function bootstrap() {
   app.use(compression());
   app.use(morgan("dev"));
   app.setGlobalPrefix("api");
-  app.enableCors({ origin: corsOrigins, credentials: true });
+
+  const corsOrigins = env.CORS_ORIGINS
+    ? env.CORS_ORIGINS.split(",").map((origin) => origin.trim())
+    : env.WEB_URL;
+  app.enableCors({ origin: corsOrigins, credentials: true, maxAge: 600 });
 
   // OpenAPI
   const config = new DocumentBuilder()
