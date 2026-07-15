@@ -1,12 +1,9 @@
-"use server";
-
 import {
   CategorySelectSchema,
   ProductExtendedSchema,
 } from "@repo/db/validators/product.validator";
 import { UserSelectSchema } from "@repo/db/validators/user.validator";
 
-import { getAuthHeaders } from "@/lib/auth";
 import { $apiFetchAndThrow } from "@/lib/fetch";
 import { successResSchema } from "@/lib/schemas";
 
@@ -19,7 +16,6 @@ export const createAdminUser = async (body: {
 }) => {
   const { data } = await $apiFetchAndThrow("/admin/users", {
     method: "POST",
-    headers: await getAuthHeaders(),
     body,
     output: successResSchema(UserSelectSchema),
   });
@@ -32,7 +28,6 @@ export const createAdminUser = async (body: {
 export const createCategory = async (body: { name: string }) => {
   const { data } = await $apiFetchAndThrow("/categories", {
     method: "POST",
-    headers: await getAuthHeaders(),
     body,
     output: successResSchema(CategorySelectSchema),
   });
@@ -49,7 +44,6 @@ export const updateCategory = async ({
 }) => {
   const { data } = await $apiFetchAndThrow(`/categories/${id}`, {
     method: "PUT",
-    headers: await getAuthHeaders(),
     body,
     output: successResSchema(CategorySelectSchema),
   });
@@ -60,7 +54,6 @@ export const updateCategory = async ({
 export const deleteCategory = async (id: string) => {
   const { data } = await $apiFetchAndThrow(`/categories/${id}`, {
     method: "DELETE",
-    headers: await getAuthHeaders(),
     output: successResSchema(CategorySelectSchema),
   });
 
@@ -99,7 +92,6 @@ export const createAdminProduct = async (input: CreateAdminProductInput) => {
 
   const { data } = await $apiFetchAndThrow("/products", {
     method: "POST",
-    headers: await getAuthHeaders(),
     body: formData,
     output: successResSchema(ProductExtendedSchema),
   });
@@ -153,7 +145,6 @@ export const updateAdminProduct = async ({
 
   const { data } = await $apiFetchAndThrow(`/products/${id}`, {
     method: "PUT",
-    headers: await getAuthHeaders(),
     body: formData,
     output: successResSchema(ProductExtendedSchema),
   });
@@ -164,7 +155,6 @@ export const updateAdminProduct = async ({
 export const deleteProduct = async (id: string) => {
   const { data } = await $apiFetchAndThrow(`/products/${id}`, {
     method: "DELETE",
-    headers: await getAuthHeaders(),
     output: successResSchema(ProductExtendedSchema),
   });
 

@@ -1,6 +1,3 @@
-"use server";
-
-import { getAuthHeaders } from "@/lib/auth";
 import { $apiFetchAndThrow } from "@/lib/fetch";
 import { successResSchema } from "@/lib/schemas";
 
@@ -17,7 +14,6 @@ export const addToCart = async ({
 }) => {
   return await $apiFetchAndThrow("/cart/items", {
     method: "POST",
-    headers: await getAuthHeaders(),
     body: { productId, quantity },
     output: successResSchema(CartResponseDataSchema),
   });

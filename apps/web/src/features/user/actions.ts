@@ -1,5 +1,3 @@
-"use server";
-
 import { z } from "zod";
 
 import {
@@ -7,14 +5,12 @@ import {
   UserUpdateSchema,
 } from "@repo/db/validators/user.validator";
 
-import { getAuthHeaders } from "@/lib/auth";
 import { $apiFetchAndThrow } from "@/lib/fetch";
 import { successResSchema } from "@/lib/schemas";
 
 export const updateUser = async (body: z.infer<typeof UserUpdateSchema>) => {
   const { data: response } = await $apiFetchAndThrow("/user/me", {
     method: "PATCH",
-    headers: await getAuthHeaders(),
     body,
     output: successResSchema(
       z.object({
@@ -31,7 +27,6 @@ export const changePassword = async (
 ) => {
   const { data: response } = await $apiFetchAndThrow("/user/me/password", {
     method: "POST",
-    headers: await getAuthHeaders(),
     body,
     output: successResSchema(
       z.object({
